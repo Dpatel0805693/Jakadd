@@ -1,0 +1,9 @@
+services:
+  r-api:
+    build: .
+    ports:
+      - "8080:8080"
+    # Dev hot-reload (optional):
+    # volumes:
+    #   - .:/app:ro
+    #   - ./survey.csv:/data/survey.csv:ro
