@@ -1,0 +1,5 @@
+{
+  "data_path": "C:\\Users\\Owner\\OneDrive\\Documents\\Test\\survey.csv",
+  "formula": "vote_intent ~ age + education_years + incumbent_party_id",
+  "options": { "include_vif": true }
+}
