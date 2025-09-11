@@ -1,12 +1,12 @@
 # r/Dockerfile
-FROM rocker/plumber:latest
+FROM rstudio/plumber:latest
 
-# Any extra packages you use
+# Extra R packages your API uses
 RUN R -e "install.packages(c('jsonlite','car'), repos='https://cloud.r-project.org')"
 
 WORKDIR /app
 COPY plumber.R ./
-# COPY templates.R utils.R ./    # uncomment if you use them
+# COPY templates.R utils.R ./   # uncomment if you use them
 COPY survey.csv /data/survey.csv
 
 EXPOSE 8080
