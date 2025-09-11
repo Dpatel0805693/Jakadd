@@ -1,9 +1,7 @@
 services:
   r-api:
-    build: .
+    build:
+      context: .
+      dockerfile: r/Dockerfile
     ports:
       - "8080:8080"
-    # Dev hot-reload (optional):
-    # volumes:
-    #   - .:/app:ro
-    #   - ./survey.csv:/data/survey.csv:ro
