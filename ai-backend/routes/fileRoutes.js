@@ -34,7 +34,7 @@ const fileFilter = (req, file, cb) => {
     }
 };
 
-//Initalizes Multer to tell where the files are saved and which extensions are allowed
+//Initialize Multer to tell where the files are saved and which extensions are allowed
 const upload = multer({storage, fileFilter});
 
 //Creating a POST route and expecting a single file request
