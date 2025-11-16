@@ -1,188 +1,206 @@
-# plumber_logistic.R - Logistic Regression Service
-# Port: 8002
+# plumber_logistic.R - CSC 230 R Stats API
+# Logistic Regression Service - Port 8002
+
+options(plumber.debug = TRUE)
+
+#* @apiTitle CSC 230 Logistic Regression API
+#* @apiDescription Port 8002 - Logistic regression for binary outcomes with broom output
 
 library(plumber)
+library(jsonlite)
 library(broom)
 library(readr)
 library(readxl)
 library(margins)
 
-#* @apiTitle Logistic Regression Service
-#* @apiDescription Performs logistic regression analysis with marginal effects
+# ---------------- CORS ----------------
+#* @filter cors
+function(req, res) {
+  res$setHeader("Access-Control-Allow-Origin", "*")
+  res$setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+  res$setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization")
+  if (req$REQUEST_METHOD == "OPTIONS") return(list())
+  forward()
+}
 
-#* Health check
-#* @get /ping
-function() {
+# ---------------- Helpers ----------------
+`%||%` <- function(a, b) if (is.null(a)) b else a
+
+parse_body <- function(req) {
+  b <- tryCatch(jsonlite::fromJSON(req$postBody, simplifyVector = FALSE),
+                error = function(e) NULL)
+  if (is.null(b)) return(NULL)
+  if (!is.null(b$payload)) b$payload else b
+}
+
+read_df <- function(path) {
+  if (!file.exists(path)) stop(sprintf("data_path not found: %s", path))
+  
+  if (grepl("\\.csv$", path, ignore.case = TRUE)) {
+    readr::read_csv(path, show_col_types = FALSE)
+  } else if (grepl("\\.xlsx?$", path, ignore.case = TRUE)) {
+    readxl::read_excel(path)
+  } else {
+    stop("Unsupported file type. Use .csv or .xlsx")
+  }
+}
+
+# Fit Logistic Regression using broom
+fit_logistic <- function(df, formula_str, exponentiate = TRUE) {
+  f   <- stats::as.formula(formula_str)
+  fit <- stats::glm(f, data = df, family = binomial())
+  
+  # Use broom for standardized JSON output
+  # exponentiate=TRUE converts log-odds to odds ratios
+  tidy_results <- broom::tidy(fit, conf.int = TRUE, exponentiate = exponentiate)
+  glance_results <- broom::glance(fit)
+  
   list(
-    status = "healthy",
-    service = "logistic",
-    timestamp = Sys.time()
+    ok            = TRUE,
+    tidy          = tidy_results,
+    glance        = glance_results,
+    diagnostics   = list(
+      residuals = as.numeric(residuals(fit, type = "deviance")),
+      fitted    = as.numeric(fitted(fit))
+    ),
+    fit           = fit   # kept internal for marginal effects
   )
 }
 
-#* Perform Logistic regression
-#* @param data_path Path to the data file
-#* @param dependent_var Name of the dependent variable
-#* @param independent_vars List of independent variable names (comma-separated or array)
+# ---------------- Health ----------------
+#* @get /ping
+#* @serializer json
+function() list(status = "healthy", port = 8002, service = "Logistic")
+
+# ---------------- Preview (POST JSON) ----------------
+#* @post /preview
+#* @parser json
+#* @param data_path:string Path to the CSV or XLSX file to preview
+#* @serializer json
+function(req, res) {
+  payload <- parse_body(req)
+  if (is.null(payload)) return(list(ok = FALSE, error = "Invalid JSON body"))
+  if (is.null(payload$data_path))
+    return(list(ok = FALSE, error = "Provide 'data_path'"))
+  
+  df <- tryCatch(read_df(payload$data_path),
+                 error = function(e) return(list(.err = e$message)))
+  if (!is.null(df$.err)) return(list(ok = FALSE, error = df$.err))
+  
+  list(
+    ok      = TRUE,
+    n       = nrow(df),
+    columns = as.list(names(df)),
+    dtypes  = as.list(sapply(df, function(x) class(x)[1])),
+    head    = utils::head(df, 5)
+  )
+}
+
+# ---------------- Logistic Regression (POST JSON) ----------------
 #* @post /logistic
-function(req, res, data_path, dependent_var, independent_vars) {
-  tryCatch({
-    # Validate inputs
-    if (missing(data_path) || missing(dependent_var) || missing(independent_vars)) {
-      res$status <- 400
-      return(list(error = "Missing required parameters"))
-    }
-    
-    # Load data
-    data <- NULL
-    if (grepl("\\.csv$", data_path, ignore.case = TRUE)) {
-      data <- read_csv(data_path, show_col_types = FALSE)
-    } else if (grepl("\\.xlsx?$", data_path, ignore.case = TRUE)) {
-      data <- read_excel(data_path)
-    } else {
-      res$status <- 400
-      return(list(error = "Unsupported file format. Use CSV or XLSX."))
-    }
-    
-    # Parse independent variables if comma-separated string
-    if (is.character(independent_vars)) {
-      if (grepl(",", independent_vars)) {
-        independent_vars <- trimws(strsplit(independent_vars, ",")[[1]])
-      } else {
-        independent_vars <- c(independent_vars)
-      }
-    }
-    
-    # Verify columns exist
-    missing_cols <- c()
-    if (!dependent_var %in% names(data)) {
-      missing_cols <- c(missing_cols, dependent_var)
-    }
-    for (var in independent_vars) {
-      if (!var %in% names(data)) {
-        missing_cols <- c(missing_cols, var)
-      }
-    }
-    
-    if (length(missing_cols) > 0) {
-      res$status <- 400
-      return(list(
-        error = "Variables not found in data",
-        missing_variables = missing_cols
-      ))
-    }
-    
-    # Convert dependent variable to binary if needed
-    data[[dependent_var]] <- as.numeric(as.factor(data[[dependent_var]])) - 1
-    
-    # Check if binary
-    unique_values <- unique(data[[dependent_var]])
-    if (length(unique_values) != 2 || !all(unique_values %in% c(0, 1))) {
-      res$status <- 400
-      return(list(
-        error = "Dependent variable must be binary (0/1)",
-        unique_values = unique_values
-      ))
-    }
-    
-    # Build formula
-    formula_str <- paste(dependent_var, "~", paste(independent_vars, collapse = " + "))
-    model_formula <- as.formula(formula_str)
-    
-    # Fit logistic model
-    model <- glm(model_formula, data = data, family = binomial(link = "logit"))
-    
-    # Check convergence
-    if (!model$converged) {
-      res$status <- 400
-      return(list(error = "Model failed to converge"))
-    }
-    
-    # Extract tidy results using broom
-    tidy_results <- tidy(model, conf.int = TRUE, exponentiate = FALSE)
-    glance_results <- glance(model)
-    
-    # Calculate marginal effects
-    marginal_effects <- NULL
-    tryCatch({
-      marg <- margins(model)
-      marginal_effects <- summary(marg)
-      
-      # For visualization: predicted probabilities
-      if (length(independent_vars) == 1) {
-        # For single predictor, create range
-        var_name <- independent_vars[1]
-        var_range <- seq(
-          min(data[[var_name]], na.rm = TRUE),
-          max(data[[var_name]], na.rm = TRUE),
-          length.out = 50
-        )
-        
-        # Create prediction data
-        pred_data <- data.frame(x = var_range)
-        names(pred_data) <- var_name
-        
-        # Get predictions with confidence intervals
-        preds <- predict(model, newdata = pred_data, type = "response", se.fit = TRUE)
-        
-        marginal_effects_plot_data <- data.frame(
-          x = var_range,
-          predicted_prob = preds$fit,
-          se = preds$se.fit,
-          lower = preds$fit - 1.96 * preds$se.fit,
-          upper = preds$fit + 1.96 * preds$se.fit
-        )
-      }
-    }, error = function(e) {
-      message("Marginal effects calculation failed: ", e$message)
-    })
-    
-    # Generate R code for reproducibility
-    r_code <- paste0(
-      "# Logistic Regression Analysis\n",
-      "# Generated: ", format(Sys.time(), "%Y-%m-%d %H:%M:%S"), "\n\n",
-      "library(readr)\n",
-      "library(broom)\n\n",
-      "# Load data\n",
-      "data <- read_csv('", basename(data_path), "')\n\n",
-      "# Fit model\n",
-      "model <- glm(", formula_str, ", data = data, family = binomial(link = 'logit'))\n\n",
-      "# View results\n",
-      "summary(model)\n",
-      "tidy(model, conf.int = TRUE)\n",
-      "glance(model)\n",
-      "\n# Odds ratios\n",
-      "tidy(model, conf.int = TRUE, exponentiate = TRUE)\n"
+#* @parser json
+#* @param formula:string Regression formula (e.g. "voted ~ age + income")
+#* @param data_path:string Path to CSV or XLSX file
+#* @param data:object Optional inline data frame as JSON array of objects
+#* @param drop_na:boolean Optional; if true, drop rows with NA before fitting
+#* @param as_factor_fields:array[string] Optional; coerce these columns to factor
+#* @param exponentiate:boolean Optional; if true (default), return odds ratios instead of log-odds
+#* @param include_margins:boolean Optional; include marginal effects
+#* @serializer json
+function(req, res) {
+  payload <- parse_body(req)
+  if (is.null(payload)) return(list(ok = FALSE, error = "Invalid JSON body"))
+  if (is.null(payload$formula)) return(list(ok = FALSE, error = "Missing 'formula'"))
+  
+  # Choose data source: inline data OR data_path
+  df <- if (!is.null(payload$data)) {
+    as.data.frame(payload$data, stringsAsFactors = FALSE)
+  } else {
+    if (is.null(payload$data_path))
+      return(list(ok = FALSE, error = "Provide 'data_path' or inline 'data'"))
+    p <- tryCatch(read_df(payload$data_path),
+                  error = function(e) return(list(.err = e$message)))
+    if (!is.null(p$.err)) return(list(ok = FALSE, error = p$.err))
+    p
+  }
+  
+  # Validate data
+  if (nrow(df) == 0) {
+    return(list(ok = FALSE, error = "Dataset is empty"))
+  }
+  if (nrow(df) < 3) {
+    return(list(ok = FALSE, error = sprintf("Need at least 3 observations. Dataset has %d rows.", nrow(df))))
+  }
+  
+  # Preprocessing
+  opts <- payload$options %||% list()
+  if (isTRUE(payload$drop_na) || isTRUE(opts$drop_na)) df <- stats::na.omit(df)
+  asf <- payload$as_factor_fields %||% opts$as_factor_fields
+  if (!is.null(asf)) for (col in asf) if (col %in% names(df)) df[[col]] <- factor(df[[col]])
+  
+  # Exponentiate option (default TRUE for odds ratios)
+  exponentiate <- if (is.null(payload$exponentiate)) TRUE else payload$exponentiate
+  
+  # Fit
+  res_fit <- tryCatch(fit_logistic(df, payload$formula, exponentiate),
+                      error = function(e) list(ok = FALSE, error = paste("fit error:", e$message)))
+  if (identical(res_fit$ok, FALSE)) return(res_fit)
+  
+  # Build output using broom results
+  out <- list(
+    ok       = TRUE,
+    n        = nrow(df),
+    formula  = payload$formula,
+    tidy     = res_fit$tidy,
+    glance   = res_fit$glance,
+    diagnostics = res_fit$diagnostics
+  )
+  
+  # Optional marginal effects
+  if (isTRUE(payload$include_margins)) {
+    out$margins <- tryCatch(
+      {
+        if (requireNamespace("margins", quietly = TRUE)) {
+          marg <- margins::margins(res_fit$fit)
+          summary(marg)
+        } else {
+          "Install package 'margins' (install.packages('margins'))"
+        }
+      },
+      error = function(e) paste("Margins error:", e$message)
     )
-    
-    # Return results
-    result <- list(
-      status = "success",
-      model_type = "logistic",
-      formula = formula_str,
-      n_obs = nrow(data),
-      tidy = tidy_results,
-      glance = glance_results,
-      r_code = r_code,
-      timestamp = format(Sys.time(), "%Y-%m-%d %H:%M:%S")
-    )
-    
-    # Add marginal effects if calculated
-    if (!is.null(marginal_effects)) {
-      result$marginal_effects <- marginal_effects
-    }
-    
-    if (exists("marginal_effects_plot_data")) {
-      result$marginal_effects_plot_data <- marginal_effects_plot_data
-    }
-    
-    return(result)
-    
-  }, error = function(e) {
-    res$status <- 500
-    list(
-      error = "Analysis failed",
-      message = as.character(e$message)
-    )
-  })
+  }
+  
+  # Generate reproducible R code
+  out$r_code <- sprintf(
+    "library(broom)\nlibrary(readr)\ndata <- read_csv('%s')\nmodel <- glm(%s, data = data, family = binomial())\ntidy(model, conf.int = TRUE, exponentiate = %s)\nglance(model)",
+    payload$data_path %||% "your_data.csv",
+    payload$formula,
+    ifelse(exponentiate, "TRUE", "FALSE")
+  )
+  
+  out
+}
+
+# ---------------- Swagger-friendly GET wrapper ----------------
+#* @get /logistic_qs
+#* @param formula:string Regression formula, e.g. "voted ~ age + income"
+#* @param data_path:string Path to data file
+#* @serializer json
+function(formula = "", data_path = "") {
+  if (!nzchar(formula))   return(list(ok = FALSE, error = "Missing 'formula'"))
+  if (!nzchar(data_path)) return(list(ok = FALSE, error = "Provide 'data_path'"))
+  df <- tryCatch(read_df(data_path), error = function(e) return(list(.err = e$message)))
+  if (!is.null(df$.err)) return(list(ok = FALSE, error = df$.err))
+  res_fit <- tryCatch(fit_logistic(df, formula, exponentiate = TRUE),
+                      error = function(e) list(ok = FALSE, error = paste("fit error:", e$message)))
+  if (identical(res_fit$ok, FALSE)) return(res_fit)
+  
+  list(
+    ok      = TRUE,
+    n       = nrow(df),
+    formula = formula,
+    tidy    = res_fit$tidy,
+    glance  = res_fit$glance
+  )
 }
