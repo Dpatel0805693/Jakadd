@@ -1,0 +1,18 @@
+﻿FROM rocker/r-ver:4.3.0
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    libcurl4-openssl-dev \
+    libssl-dev \
+    libxml2-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install only plumber from binary
+RUN R -e "install.packages('plumber', repos='https://packagemanager.posit.co/cran/__linux__/jammy/latest')"
+
+WORKDIR /app
+COPY plumber_reserved.R /app/
+
+EXPOSE 8004
+
+CMD ["R", "-e", "plumber::pr('/app/plumber_reserved.R') |> plumber::pr_run(host='0.0.0.0', port=8004)"]
