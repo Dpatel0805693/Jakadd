@@ -1,79 +1,174 @@
-version: '3.8'
+﻿services:
+  # MongoDB Database
+  mongodb:
+    image: mongo:7
+    container_name: csc230-mongodb
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+    environment:
+      - MONGO_INITDB_DATABASE=csc230
+    networks:
+      - csc230-network
+    healthcheck:
+      test: echo 'db.runCommand("ping").ok' | mongosh localhost:27017/test --quiet
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
-services:
-  # OLS Regression Service (Port 8000)
-  r-service-ols:
+  # Core API (Backend)
+  core-api:
     build:
-      context: .
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: csc230-core-api
+    ports:
+      - "3000:3000"
+    environment:
+      - PORT=3000
+      - NODE_ENV=production
+      - MONGO_URI=mongodb://mongodb:27017/csc230
+      - JWT_SECRET=${JWT_SECRET:-your-super-secret-jwt-key-change-in-production}
+      - FRONTEND_URL=http://localhost:5173
+      - INTEGRATION_API_URL=http://integration-api:5001
+    volumes:
+      - ./backend:/app
+      - /app/node_modules
+      - uploads:/uploads
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    networks:
+      - csc230-network
+    restart: unless-stopped
+
+  # Integration API
+  integration-api:
+    build:
+      context: ./integration-api
+      dockerfile: Dockerfile
+    container_name: csc230-integration-api
+    ports:
+      - "5001:5001"
+    environment:
+      - PORT=5001
+      - NODE_ENV=production
+      - MONGO_URI=mongodb://mongodb:27017/csc230
+      - R_OLS_URL=http://r-ols:8000
+      - R_LOGISTIC_URL=http://r-logistic:8002
+      - R_RESERVED_URL=http://r-reserved:8004
+      - AI_GATEWAY_URL=http://ai-gateway:8001
+      - CORE_API_URL=http://core-api:3000
+      - MAX_QUEUE_SIZE=10
+      - ANALYSIS_TIMEOUT=45000
+    volumes:
+      - ./integration-api:/app
+      - /app/node_modules
+      - uploads:/uploads
+    depends_on:
+      - mongodb
+      - core-api
+      - ai-gateway
+    networks:
+      - csc230-network
+    restart: unless-stopped
+
+  # AI Gateway
+  ai-gateway:
+    build:
+      context: ./ai-gateway
+      dockerfile: Dockerfile
+    container_name: csc230-ai-gateway
+    ports:
+      - "8001:8001"
+    environment:
+      - PORT=8001
+      - NODE_ENV=production
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - OPENAI_MODEL=gpt-4o-mini
+      - MAX_COST_PER_MONTH=10
+    volumes:
+      - ./ai-gateway:/app
+      - /app/node_modules
+    networks:
+      - csc230-network
+    restart: unless-stopped
+
+  # R Service - OLS Regression
+  r-ols:
+    build:
+      context: ./r-services
       dockerfile: Dockerfile.ols
-    container_name: statsmate_r_ols
+    container_name: csc230-r-ols
     ports:
       - "8000:8000"
-    volumes:
-      - ./data:/data:ro  # Read-only mount for data files
-      - ./examples:/examples:ro  # Read-only mount for example files
     environment:
-      - R_SERVICE_TYPE=OLS
-      - TZ=America/New_York
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/ping"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 40s
+      - PORT=8000
+      - SERVICE_NAME=ols
+    volumes:
+      - uploads:/uploads:ro
     networks:
-      - statsmate-network
+      - csc230-network
+    restart: unless-stopped
 
-  # Logistic Regression Service (Port 8002)
-  r-service-logistic:
+  # R Service - Logistic Regression
+  r-logistic:
     build:
-      context: .
+      context: ./r-services
       dockerfile: Dockerfile.logistic
-    container_name: statsmate_r_logistic
+    container_name: csc230-r-logistic
     ports:
       - "8002:8002"
-    volumes:
-      - ./data:/data:ro
-      - ./examples:/examples:ro
     environment:
-      - R_SERVICE_TYPE=LOGISTIC
-      - TZ=America/New_York
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8002/ping"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 40s
+      - PORT=8002
+      - SERVICE_NAME=logistic
+    volumes:
+      - uploads:/uploads:ro
     networks:
-      - statsmate-network
+      - csc230-network
+    restart: unless-stopped
 
-  # Reserved Service (Port 8004)
-  r-service-reserved:
+  # R Service - Reserved
+  r-reserved:
     build:
-      context: .
+      context: ./r-services
       dockerfile: Dockerfile.reserved
-    container_name: statsmate_r_reserved
+    container_name: csc230-r-reserved
     ports:
       - "8004:8004"
     environment:
-      - R_SERVICE_TYPE=RESERVED
-      - TZ=America/New_York
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8004/ping"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 40s
+      - PORT=8004
+      - SERVICE_NAME=reserved
+    volumes:
+      - uploads:/uploads:ro
     networks:
-      - statsmate-network
+      - csc230-network
+    restart: unless-stopped
+
+  # Frontend
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: csc230-frontend
+    ports:
+      - "5173:5173"
+    environment:
+      - VITE_API_URL=http://localhost:3000
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    depends_on:
+      - core-api
+    networks:
+      - csc230-network
+    restart: unless-stopped
 
 networks:
-  statsmate-network:
+  csc230-network:
     driver: bridge
 
-# Optional: Add volume for persistent data if needed
-# volumes:
-#   data-volume:
+volumes:
+  mongodb_data:
+  uploads:
