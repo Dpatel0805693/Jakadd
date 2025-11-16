@@ -1,7 +1,79 @@
+version: '3.8'
+
 services:
-  r-api:
+  # OLS Regression Service (Port 8000)
+  r-service-ols:
     build:
       context: .
-      dockerfile: r/Dockerfile
+      dockerfile: Dockerfile.ols
+    container_name: statsmate_r_ols
     ports:
-      - "8080:8080"
+      - "8000:8000"
+    volumes:
+      - ./data:/data:ro  # Read-only mount for data files
+      - ./examples:/examples:ro  # Read-only mount for example files
+    environment:
+      - R_SERVICE_TYPE=OLS
+      - TZ=America/New_York
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - statsmate-network
+
+  # Logistic Regression Service (Port 8002)
+  r-service-logistic:
+    build:
+      context: .
+      dockerfile: Dockerfile.logistic
+    container_name: statsmate_r_logistic
+    ports:
+      - "8002:8002"
+    volumes:
+      - ./data:/data:ro
+      - ./examples:/examples:ro
+    environment:
+      - R_SERVICE_TYPE=LOGISTIC
+      - TZ=America/New_York
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8002/ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - statsmate-network
+
+  # Reserved Service (Port 8004)
+  r-service-reserved:
+    build:
+      context: .
+      dockerfile: Dockerfile.reserved
+    container_name: statsmate_r_reserved
+    ports:
+      - "8004:8004"
+    environment:
+      - R_SERVICE_TYPE=RESERVED
+      - TZ=America/New_York
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8004/ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - statsmate-network
+
+networks:
+  statsmate-network:
+    driver: bridge
+
+# Optional: Add volume for persistent data if needed
+# volumes:
+#   data-volume:
