@@ -1,150 +1,216 @@
-# plumber_ols.R - OLS Regression Service
-# Port: 8000
+# plumber_ols.R - CSC 230 R Stats API (UTF-8, no BOM)
+# OLS Regression Service - Port 8000
+
+options(plumber.debug = TRUE)
+
+#* @apiTitle CSC 230 OLS Regression API
+#* @apiDescription Port 8000 - Ordinary Least Squares regression with broom output
 
 library(plumber)
+library(jsonlite)
 library(broom)
 library(readr)
 library(readxl)
+library(car)
+library(sandwich)
 
-#* @apiTitle OLS Regression Service
-#* @apiDescription Performs Ordinary Least Squares regression analysis
+# ---------------- CORS (so React/Postman/Swagger can call this) ----------------
+#* @filter cors
+function(req, res) {
+  res$setHeader("Access-Control-Allow-Origin", "*")
+  res$setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+  res$setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization")
+  if (req$REQUEST_METHOD == "OPTIONS") return(list())
+  forward()
+}
 
-#* Health check
+# ---------------- Helpers ----------------
+`%||%` <- function(a, b) if (is.null(a)) b else a
+
+# Parse raw JSON body; accept either {payload:{...}} or {...}
+parse_body <- function(req) {
+  b <- tryCatch(jsonlite::fromJSON(req$postBody, simplifyVector = FALSE),
+                error = function(e) NULL)
+  if (is.null(b)) return(NULL)
+  if (!is.null(b$payload)) b$payload else b
+}
+
+# Enhanced read function supporting CSV and XLSX
+read_df <- function(path) {
+  if (!file.exists(path)) stop(sprintf("data_path not found: %s", path))
+  
+  # Detect file type and read accordingly
+  if (grepl("\\.csv$", path, ignore.case = TRUE)) {
+    readr::read_csv(path, show_col_types = FALSE)
+  } else if (grepl("\\.xlsx?$", path, ignore.case = TRUE)) {
+    readxl::read_excel(path)
+  } else {
+    stop("Unsupported file type. Use .csv or .xlsx")
+  }
+}
+
+# Fit OLS using broom for standardized output
+fit_ols <- function(df, formula_str) {
+  f   <- stats::as.formula(formula_str)
+  fit <- stats::lm(f, data = df)
+  
+  # Use broom for standardized JSON output
+  tidy_results <- broom::tidy(fit, conf.int = TRUE)
+  glance_results <- broom::glance(fit)
+  
+  list(
+    ok            = TRUE,
+    tidy          = tidy_results,
+    glance        = glance_results,
+    diagnostics   = list(
+      residuals = as.numeric(residuals(fit)),
+      fitted    = as.numeric(fitted(fit))
+    ),
+    fit           = fit   # kept internal for VIF calculation
+  )
+}
+
+# ---------------- Health ----------------
 #* @get /ping
-function() {
+#* @serializer json
+function() list(status = "healthy", port = 8000, service = "OLS")
+
+# ---------------- Preview (POST JSON) ----------------
+#* @post /preview
+#* @parser json
+#* @param data_path:string Path to the CSV file to preview
+#* @serializer json
+function(req, res) {
+  payload <- parse_body(req)
+  if (is.null(payload)) return(list(ok = FALSE, error = "Invalid JSON body"))
+  if (is.null(payload$data_path))
+    return(list(ok = FALSE, error = "Provide 'data_path'"))
+  
+  df <- tryCatch(read_df(payload$data_path),
+                 error = function(e) return(list(.err = e$message)))
+  if (!is.null(df$.err)) return(list(ok = FALSE, error = df$.err))
+  
   list(
-    status = "healthy",
-    service = "ols",
-    timestamp = Sys.time()
+    ok      = TRUE,
+    n       = nrow(df),
+    columns = as.list(names(df)),
+    dtypes  = as.list(sapply(df, function(x) class(x)[1])),
+    head    = utils::head(df, 5)
   )
 }
 
-#* Perform OLS regression
-#* @param data_path Path to the data file
-#* @param dependent_var Name of the dependent variable
-#* @param independent_vars List of independent variable names (comma-separated or array)
+# ---------------- OLS (POST JSON) ----------------
 #* @post /ols
-function(req, res, data_path, dependent_var, independent_vars) {
-  tryCatch({
-    # Validate inputs
-    if (missing(data_path) || missing(dependent_var) || missing(independent_vars)) {
-      res$status <- 400
-      return(list(error = "Missing required parameters"))
-    }
-    
-    # Load data
-    data <- NULL
-    if (grepl("\\.csv$", data_path, ignore.case = TRUE)) {
-      data <- read_csv(data_path, show_col_types = FALSE)
-    } else if (grepl("\\.xlsx?$", data_path, ignore.case = TRUE)) {
-      data <- read_excel(data_path)
-    } else {
-      res$status <- 400
-      return(list(error = "Unsupported file format. Use CSV or XLSX."))
-    }
-    
-    # Parse independent variables if comma-separated string
-    if (is.character(independent_vars)) {
-      if (grepl(",", independent_vars)) {
-        independent_vars <- trimws(strsplit(independent_vars, ",")[[1]])
-      } else {
-        independent_vars <- c(independent_vars)
-      }
-    }
-    
-    # Verify columns exist
-    missing_cols <- c()
-    if (!dependent_var %in% names(data)) {
-      missing_cols <- c(missing_cols, dependent_var)
-    }
-    for (var in independent_vars) {
-      if (!var %in% names(data)) {
-        missing_cols <- c(missing_cols, var)
-      }
-    }
-    
-    if (length(missing_cols) > 0) {
-      res$status <- 400
-      return(list(
-        error = "Variables not found in data",
-        missing_variables = missing_cols
-      ))
-    }
-    
-    # Build formula
-    formula_str <- paste(dependent_var, "~", paste(independent_vars, collapse = " + "))
-    model_formula <- as.formula(formula_str)
-    
-    # Fit OLS model
-    model <- lm(model_formula, data = data)
-    
-    # Extract tidy results using broom
-    tidy_results <- tidy(model, conf.int = TRUE)
-    glance_results <- glance(model)
-    
-    # Generate R code for reproducibility
-    r_code <- paste0(
-      "# OLS Regression Analysis\n",
-      "# Generated: ", format(Sys.time(), "%Y-%m-%d %H:%M:%S"), "\n\n",
-      "library(readr)\n",
-      "library(broom)\n\n",
-      "# Load data\n",
-      "data <- read_csv('", basename(data_path), "')\n\n",
-      "# Fit model\n",
-      "model <- lm(", formula_str, ", data = data)\n\n",
-      "# View results\n",
-      "summary(model)\n",
-      "tidy(model, conf.int = TRUE)\n",
-      "glance(model)\n"
+#* @parser json
+#* @param formula:string Regression formula (e.g. "y ~ x1 + x2")
+#* @param data_path:string Path to CSV file (ignored if 'data' provided inline)
+#* @param data:object Optional inline data frame as JSON array of objects
+#* @param drop_na:boolean Optional; if true, drop rows with NA before fitting
+#* @param as_factor_fields:array[string] Optional; coerce these columns to factor
+#* @param include_vif:boolean Optional; include VIF vector (requires 'car' pkg)
+#* @serializer json
+function(req, res) {
+  payload <- parse_body(req)
+  if (is.null(payload)) return(list(ok = FALSE, error = "Invalid JSON body"))
+  if (is.null(payload$formula)) return(list(ok = FALSE, error = "Missing 'formula'"))
+  
+  # Choose data source: inline data OR data_path
+  df <- if (!is.null(payload$data)) {
+    as.data.frame(payload$data, stringsAsFactors = FALSE)
+  } else {
+    if (is.null(payload$data_path))
+      return(list(ok = FALSE, error = "Provide 'data_path' or inline 'data'"))
+    p <- tryCatch(read_df(payload$data_path),
+                  error = function(e) return(list(.err = e$message)))
+    if (!is.null(p$.err)) return(list(ok = FALSE, error = p$.err))
+    p
+  }
+  
+  # Validate data
+  if (nrow(df) == 0) {
+    return(list(ok = FALSE, error = "Dataset is empty"))
+  }
+  if (nrow(df) < 3) {
+    return(list(ok = FALSE, error = sprintf("Need at least 3 observations. Dataset has %d rows.", nrow(df))))
+  }
+  
+  # Preprocessing
+  opts <- payload$options %||% list()
+  if (isTRUE(payload$drop_na) || isTRUE(opts$drop_na)) df <- stats::na.omit(df)
+  asf <- payload$as_factor_fields %||% opts$as_factor_fields
+  if (!is.null(asf)) for (col in asf) if (col %in% names(df)) df[[col]] <- factor(df[[col]])
+  
+  # Fit
+  res_fit <- tryCatch(fit_ols(df, payload$formula),
+                      error = function(e) list(ok = FALSE, error = paste("fit error:", e$message)))
+  if (identical(res_fit$ok, FALSE)) return(res_fit)
+  
+  # Build output using broom results
+  out <- list(
+    ok       = TRUE,
+    n        = nrow(df),
+    formula  = payload$formula,
+    tidy     = res_fit$tidy,
+    glance   = res_fit$glance,
+    diagnostics = res_fit$diagnostics
+  )
+  
+  # Optional VIF
+  if (isTRUE(payload$include_vif)) {
+    out$vif <- tryCatch(
+      {
+        if (requireNamespace("car", quietly = TRUE)) as.list(car::vif(res_fit$fit))
+        else "Install package 'car' (install.packages('car'))"
+      },
+      error = function(e) paste("VIF error:", e$message)
     )
-    
-    # Add diagnostics
-    diagnostics <- list(
-      residuals = as.numeric(residuals(model)),
-      fitted = as.numeric(fitted(model)),
-      standardized_residuals = as.numeric(rstandard(model))
-    )
-    
-    # Return results
-    list(
-      status = "success",
-      model_type = "ols",
-      formula = formula_str,
-      n_obs = nrow(data),
-      tidy = tidy_results,
-      glance = glance_results,
-      diagnostics = diagnostics,
-      r_code = r_code,
-      timestamp = format(Sys.time(), "%Y-%m-%d %H:%M:%S")
-    )
-    
-  }, error = function(e) {
-    res$status <- 500
-    list(
-      error = "Analysis failed",
-      message = as.character(e$message)
-    )
-  })
+  }
+  
+  # Generate reproducible R code
+  out$r_code <- sprintf(
+    "library(broom)\nlibrary(readr)\ndata <- read_csv('%s')\nmodel <- lm(%s, data = data)\ntidy(model, conf.int = TRUE)\nglance(model)",
+    payload$data_path %||% "your_data.csv",
+    payload$formula
+  )
+  
+  out
 }
-#* Health check
-#* @get /health
-function() {
+
+# ---------------- Swagger-friendly GET wrapper (query-string) ----------------
+#* @get /preview_qs
+#* @param data_path:string Path to CSV (query)
+#* @serializer json
+function(data_path = "") {
+  if (!nzchar(data_path)) return(list(ok = FALSE, error = "Provide 'data_path'"))
+  df <- tryCatch(read_df(data_path), error = function(e) return(list(.err = e$message)))
+  if (!is.null(df$.err)) return(list(ok = FALSE, error = df$.err))
   list(
-    status = "healthy",
-    service = "r-ols",
-    timestamp = Sys.time()
+    ok      = TRUE,
+    n       = nrow(df),
+    columns = as.list(names(df)),
+    dtypes  = as.list(sapply(df, function(x) class(x)[1])),
+    head    = utils::head(df, 5)
   )
 }
 
-#* Root endpoint
-#* @get /
-function() {
+#* @get /ols_qs
+#* @param formula:string Regression formula, e.g. "Weight ~ Height + Age"
+#* @param data_path:string Path to CSV (query)
+#* @serializer json
+function(formula = "", data_path = "") {
+  if (!nzchar(formula))   return(list(ok = FALSE, error = "Missing 'formula'"))
+  if (!nzchar(data_path)) return(list(ok = FALSE, error = "Provide 'data_path'"))
+  df <- tryCatch(read_df(data_path), error = function(e) return(list(.err = e$message)))
+  if (!is.null(df$.err)) return(list(ok = FALSE, error = df$.err))
+  res_fit <- tryCatch(fit_ols(df, formula),
+                      error = function(e) list(ok = FALSE, error = paste("fit error:", e$message)))
+  if (identical(res_fit$ok, FALSE)) return(res_fit)
+  
   list(
-    message = "OLS Regression Service",
-    version = "1.0.0",
-    endpoints = list(
-      health = "GET /health",
-      analyze = "POST /analyze"
-    )
+    ok      = TRUE,
+    n       = nrow(df),
+    formula = formula,
+    tidy    = res_fit$tidy,
+    glance  = res_fit$glance
   )
 }
