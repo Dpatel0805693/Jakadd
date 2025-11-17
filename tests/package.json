@@ -1,0 +1,17 @@
+{
+  "name": "statsmate-integration-tests",
+  "version": "1.0.0",
+  "description": "Integration tests for StatsMate R services and AI Gateway",
+  "scripts": {
+    "test": "node test-ai-gateway.js && node test-full-pipeline.js",
+    "test:ai": "node test-ai-gateway.js",
+    "test:pipeline": "node test-full-pipeline.js",
+    "test:watch": "nodemon --exec 'npm run test:ai'"
+  },
+  "keywords": ["testing", "integration", "ai", "statistics"],
+  "author": "Jordano - R Stats & AI Gateway Lead",
+  "license": "MIT",
+  "devDependencies": {
+    "nodemon": "^3.0.1"
+  }
+}
