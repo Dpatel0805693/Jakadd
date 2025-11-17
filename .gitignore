@@ -1,0 +1,53 @@
+# Create .gitignore in root
+cd "C:\Users\Owner\Documents\CSC 230 Final Code"
+notepad .gitignore
+```
+
+**Paste this:**
+```
+# Environment variables (CRITICAL - API KEYS)
+.env
+.env.local
+.env.development
+.env.production
+*.env
+
+# Node modules
+node_modules/
+*/node_modules/
+
+# Build outputs
+dist/
+build/
+*/dist/
+*/build/
+
+# Logs
+*.log
+npm-debug.log*
+logs/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Temporary files
+*.tmp
+temp/
+tmp/
+
+# Test coverage
+coverage/
+*.coverage
+
+# R files
+.Rhistory
+.RData
+.Rproj.user/
