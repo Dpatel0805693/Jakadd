@@ -1,6 +1,6 @@
-// pages/Home.jsx - Temporary home page for testing
+// pages/Home.jsx - Home page with navigation
 import { Link } from 'react-router-dom';
-import { Upload, TrendingUp } from 'lucide-react';
+import { Upload, TrendingUp, BarChart3 } from 'lucide-react';
 
 export default function Home() {
   return (
@@ -13,10 +13,15 @@ export default function Home() {
           AI-Powered Statistical Analysis
         </p>
         
-        <div className="flex gap-4 justify-center">
+        <div className="flex gap-4 justify-center flex-wrap">
           <Link to="/configure/demo" className="btn-primary flex items-center gap-2">
             <TrendingUp className="w-5 h-5" />
-            Try Demo Analysis
+            Configure Analysis
+          </Link>
+          
+          <Link to="/results/demo" className="btn-secondary flex items-center gap-2">
+            <BarChart3 className="w-5 h-5" />
+            View Demo Results
           </Link>
         </div>
 
