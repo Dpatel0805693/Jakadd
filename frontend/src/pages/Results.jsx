@@ -1,476 +1,783 @@
-// pages/Results.jsx - Display regression results with charts and AI interpretation
-import { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
-import { motion } from 'framer-motion';
-import { 
-  Download, 
-  TrendingUp, 
-  BarChart3, 
-  Sparkles,
-  ArrowLeft,
-  CheckCircle,
-  AlertCircle
-} from 'lucide-react';
-import {
-  LineChart,
-  Line,
-  ScatterChart,
-  Scatter,
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  Legend,
-  ResponsiveContainer,
-  Cell
-} from 'recharts';
-import StatTooltip from '../components/Tooltip';
+// src/pages/Results.jsx
+// Analysis results display with tabbed interface
 
-export default function Results() {
-  const { analysisId } = useParams();
+import React, { useState, useEffect } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
+import apiService from '../services/api';
+import { CoefficientPlot, RegressionPlot, ResidualsPlot, ChartContainer } from '../components/charts';
+
+const Results = () => {
   const navigate = useNavigate();
-  const [results, setResults] = useState(null);
+  const { analysisId } = useParams();
+  
+  const [analysis, setAnalysis] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [activeTab, setActiveTab] = useState('interpretation');
 
   useEffect(() => {
-    loadResults();
-  }, [analysisId]);
-
-  const loadResults = async () => {
-    // Mock data for demo
-    if (analysisId === 'demo') {
-      const mockResults = {
-        id: 'demo',
-        model_type: 'ols',
-        formula: 'mpg ~ hp + wt',
-        created_at: new Date().toISOString(),
-        tidy: [
-          { 
-            term: '(Intercept)', 
-            estimate: 37.227, 
-            'std.error': 1.598, 
-            statistic: 23.285, 
-            'p.value': 0.000 
-          },
-          { 
-            term: 'hp', 
-            estimate: -0.032, 
-            'std.error': 0.009, 
-            statistic: -3.519, 
-            'p.value': 0.001 
-          },
-          { 
-            term: 'wt', 
-            estimate: -3.878, 
-            'std.error': 0.633, 
-            statistic: -6.129, 
-            'p.value': 0.000 
-          }
-        ],
-        glance: {
-          'r.squared': 0.827,
-          'adj.r.squared': 0.815,
-          sigma: 2.593,
-          statistic: 69.211,
-          'p.value': 0.000,
-          df: 2,
-          nobs: 32
-        },
-        ai_interpretation: {
-          summary: "This regression model effectively predicts miles per gallon (mpg) based on horsepower (hp) and weight (wt) of cars. The results show that both horsepower and weight significantly impact fuel efficiency.",
-          model_quality: {
-            rating: "excellent",
-            explanation: "The R² value of 0.827 indicates that 82.7% of the variation in mpg is explained by the model. All predictors are statistically significant (p < 0.05)."
-          },
-          key_findings: [
-            "For every additional unit of horsepower, mpg decreases by 0.032 units (holding weight constant)",
-            "For every 1000 lb increase in weight, mpg decreases by 3.878 units (holding horsepower constant)",
-            "The intercept of 37.227 represents the expected mpg when both hp and wt are zero (theoretical baseline)"
-          ],
-          recommendations: [
-            "The model shows strong predictive power and can be used for forecasting",
-            "Both variables are important - consider their interaction effects in future models",
-            "Weight has a stronger effect than horsepower on fuel efficiency"
-          ]
-        },
-        residuals: [
-          { fitted: 21.5, residual: -0.5 },
-          { fitted: 21.2, residual: -0.2 },
-          { fitted: 23.1, residual: -0.3 },
-          { fitted: 20.8, residual: 0.6 },
-          { fitted: 18.4, residual: 0.3 },
-          { fitted: 18.3, residual: -0.2 },
-          { fitted: 13.9, residual: 0.4 },
-          { fitted: 24.6, residual: -0.2 },
-          { fitted: 23.2, residual: -0.4 },
-          { fitted: 19.1, residual: 0.1 }
-        ]
-      };
-      
-      setResults(mockResults);
+    if (!analysisId) {
+      setError('No analysis ID provided');
       setLoading(false);
       return;
     }
+    loadAnalysis();
+  }, [analysisId]);
 
-    // TODO: Real API call
-    setLoading(false);
+  const loadAnalysis = async () => {
+    try {
+      setLoading(true);
+      const data = await apiService.getAnalysis(analysisId);
+      if (data.analysis) {
+        setAnalysis(data.analysis);
+        setLoading(false);
+      } else {
+        setError('Analysis not found');
+        setLoading(false);
+      }
+    } catch (err) {
+      setError(err.message || 'Failed to load analysis results');
+      setLoading(false);
+    }
   };
 
-  const downloadResults = () => {
-    const dataStr = JSON.stringify(results, null, 2);
-    const dataBlob = new Blob([dataStr], { type: 'application/json' });
-    const url = URL.createObjectURL(dataBlob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `analysis_${analysisId}_results.json`;
-    link.click();
+  const formatCoefficients = (tidy) => {
+    if (!tidy || !Array.isArray(tidy)) return null;
+    
+    return (
+      <table style={styles.resultTable}>
+        <thead>
+          <tr>
+            <th style={styles.resultTh}>Term</th>
+            <th style={styles.resultTh}>Estimate</th>
+            <th style={styles.resultTh}>Std. Error</th>
+            <th style={styles.resultTh}>t-value</th>
+            <th style={styles.resultTh}>p-value</th>
+          </tr>
+        </thead>
+        <tbody>
+          {tidy.map((row, i) => (
+            <tr key={i} style={styles.resultTr}>
+              <td style={styles.resultTd}>{row.term}</td>
+              <td style={styles.resultTd}>{row.estimate?.toFixed(4)}</td>
+              <td style={styles.resultTd}>{row['std.error']?.toFixed(4)}</td>
+              <td style={styles.resultTd}>{row.statistic?.toFixed(4)}</td>
+              <td style={{
+                ...styles.resultTd,
+                color: row['p.value'] < 0.05 ? '#00ff00' : '#ff6666',
+                fontWeight: row['p.value'] < 0.05 ? 'bold' : 'normal'
+              }}>
+                {row['p.value']?.toFixed(4)}
+                {row['p.value'] < 0.05 && ' *'}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    );
   };
 
-  const downloadCSV = () => {
-    if (!results?.tidy) return;
+  const formatDiagnostics = (glance) => {
+    if (!glance || !Array.isArray(glance) || glance.length === 0) return null;
     
-    const headers = ['Term', 'Estimate', 'Std Error', 'Statistic', 'P-Value'];
-    const rows = results.tidy.map(row => [
-      row.term,
-      row.estimate,
-      row['std.error'],
-      row.statistic,
-      row['p.value']
-    ]);
+    const stats = glance[0];
     
-    const csv = [
-      headers.join(','),
-      ...rows.map(row => row.join(','))
-    ].join('\n');
+    return (
+      <div style={styles.diagnosticsGrid}>
+        {stats.r_squared !== undefined && (
+          <div style={styles.statCard}>
+            <div style={styles.statLabel}>R²</div>
+            <div style={styles.statValue}>{stats.r_squared.toFixed(4)}</div>
+            <div style={styles.statHint}>Model fit</div>
+          </div>
+        )}
+        {stats.adj_r_squared !== undefined && (
+          <div style={styles.statCard}>
+            <div style={styles.statLabel}>Adjusted R²</div>
+            <div style={styles.statValue}>{stats.adj_r_squared.toFixed(4)}</div>
+            <div style={styles.statHint}>Adjusted fit</div>
+          </div>
+        )}
+        {stats.sigma !== undefined && (
+          <div style={styles.statCard}>
+            <div style={styles.statLabel}>Residual Std. Error</div>
+            <div style={styles.statValue}>{stats.sigma.toFixed(4)}</div>
+            <div style={styles.statHint}>Model error</div>
+          </div>
+        )}
+        {stats.statistic !== undefined && (
+          <div style={styles.statCard}>
+            <div style={styles.statLabel}>F-statistic</div>
+            <div style={styles.statValue}>{stats.statistic.toFixed(4)}</div>
+            <div style={styles.statHint}>Overall significance</div>
+          </div>
+        )}
+        {stats.p_value !== undefined && (
+          <div style={styles.statCard}>
+            <div style={styles.statLabel}>p-value</div>
+            <div style={{
+              ...styles.statValue,
+              color: stats.p_value < 0.05 ? '#00ff00' : '#ff6666'
+            }}>
+              {stats.p_value.toFixed(6)}
+            </div>
+            <div style={styles.statHint}>Model significance</div>
+          </div>
+        )}
+        {stats.df !== undefined && (
+          <div style={styles.statCard}>
+            <div style={styles.statLabel}>Degrees of Freedom</div>
+            <div style={styles.statValue}>{stats.df}</div>
+            <div style={styles.statHint}>Model complexity</div>
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  // Transform tidy data for CoefficientPlot
+  const prepareCoefficientsForChart = (tidy) => {
+    if (!tidy || !Array.isArray(tidy)) return [];
     
-    const blob = new Blob([csv], { type: 'text/csv' });
+    return tidy.map(row => ({
+      variable: row.term,
+      estimate: row.estimate,
+      std_error: row['std.error'],
+      p_value: row['p.value']
+    }));
+  };
+
+  // Prepare residuals data if available
+  const prepareResidualsData = (results) => {
+    if (!results.diagnostics) return null;
+    
+    return {
+      fitted: results.diagnostics.fitted || [],
+      residuals: results.diagnostics.residuals || []
+    };
+  };
+
+  const downloadResults = (analysis) => {
+    const content = generateDownloadContent(analysis);
+    const blob = new Blob([content], { type: 'text/plain' });
     const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `analysis_${analysisId}_coefficients.csv`;
-    link.click();
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `statsmate_results_${analysis._id}.txt`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  const generateDownloadContent = (analysis) => {
+    const { results, interpretation, dependentVar, independentVars, modelType } = analysis;
+    
+    let content = `STATSMATE ANALYSIS RESULTS\n`;
+    content += `${'='.repeat(70)}\n\n`;
+    content += `Model Type: ${modelType?.toUpperCase() || 'OLS'} Regression\n`;
+    content += `Dependent Variable: ${dependentVar}\n`;
+    content += `Independent Variables: ${independentVars?.join(', ')}\n`;
+    content += `Analysis Date: ${new Date(analysis.createdAt).toLocaleString()}\n\n`;
+    
+    // Coefficients
+    if (results.tidy && results.tidy.length > 0) {
+      content += `COEFFICIENTS\n`;
+      content += `${'-'.repeat(70)}\n`;
+      content += `${'Term'.padEnd(25)} ${'Estimate'.padStart(12)} ${'Std.Error'.padStart(12)} ${'t-value'.padStart(10)} ${'p-value'.padStart(10)}\n`;
+      content += `${'-'.repeat(70)}\n`;
+      
+      results.tidy.forEach(row => {
+        content += `${row.term.padEnd(25)} `;
+        content += `${row.estimate.toFixed(4).padStart(12)} `;
+        content += `${(row['std.error'] || 0).toFixed(4).padStart(12)} `;
+        content += `${(row.statistic || 0).toFixed(4).padStart(10)} `;
+        content += `${(row['p.value'] || 0).toFixed(4).padStart(10)}`;
+        if (row['p.value'] < 0.05) content += ` *`;
+        content += `\n`;
+      });
+      content += `\n* p < 0.05 (statistically significant)\n\n`;
+    }
+    
+    // Model diagnostics
+    if (results.glance) {
+      const glance = Array.isArray(results.glance) ? results.glance[0] : results.glance;
+      content += `MODEL DIAGNOSTICS\n`;
+      content += `${'-'.repeat(70)}\n`;
+      if (glance.r_squared !== undefined) {
+        content += `R-squared:              ${glance.r_squared.toFixed(4)}\n`;
+      }
+      if (glance.adj_r_squared !== undefined) {
+        content += `Adjusted R-squared:     ${glance.adj_r_squared.toFixed(4)}\n`;
+      }
+      if (glance.sigma !== undefined) {
+        content += `Residual Std. Error:    ${glance.sigma.toFixed(4)}\n`;
+      }
+      if (glance.statistic !== undefined) {
+        content += `F-statistic:            ${glance.statistic.toFixed(4)}\n`;
+      }
+      if (glance.p_value !== undefined) {
+        content += `p-value:                ${glance.p_value.toFixed(6)}\n`;
+      }
+      content += `\n`;
+    }
+    
+    // Interpretation
+    if (interpretation) {
+      content += `AI INTERPRETATION\n`;
+      content += `${'-'.repeat(70)}\n`;
+      content += `${interpretation}\n\n`;
+    }
+    
+    // R Code
+    if (results.r_code) {
+      content += `R CODE\n`;
+      content += `${'-'.repeat(70)}\n`;
+      content += `${results.r_code}\n`;
+    }
+    
+    return content;
   };
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-center">
-          <div className="w-16 h-16 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-gray-300">Loading results...</p>
-        </div>
+      <div style={styles.loadingContainer}>
+        <div style={styles.spinner} />
+        <h3>Analyzing Your Data...</h3>
+        <p>This may take a few moments</p>
       </div>
     );
   }
 
-  if (!results) {
+  if (error) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-center">
-          <AlertCircle className="w-16 h-16 text-red-400 mx-auto mb-4" />
-          <p className="text-gray-300">Results not found</p>
-          <button onClick={() => navigate('/')} className="btn-primary mt-4">
-            Go Home
-          </button>
-        </div>
+      <div style={styles.errorContainer}>
+        <h2>⚠️ Error</h2>
+        <p>{error}</p>
+        <button style={styles.backButton} onClick={() => navigate('/dashboard')}>
+          ← Back to Dashboard
+        </button>
       </div>
     );
   }
+
+  if (!analysis || !analysis.results) {
+    return (
+      <div style={styles.errorContainer}>
+        <h2>⚠️ No Results</h2>
+        <p>Analysis results not available</p>
+        <button style={styles.backButton} onClick={() => navigate('/dashboard')}>
+          ← Back to Dashboard
+        </button>
+      </div>
+    );
+  }
+
+  const { results, interpretation } = analysis;
 
   return (
-    <div className="min-h-screen p-8">
-      <div className="max-w-7xl mx-auto">
-        {/* Header */}
-        <div className="flex items-center justify-between mb-8">
-          <div className="flex items-center gap-4">
+    <div style={styles.container}>
+      {/* Header */}
+      <div style={styles.header}>
+        <button style={styles.backButton} onClick={() => navigate('/dashboard')}>
+          ← Back to Dashboard
+        </button>
+        <h2 style={styles.title}>Analysis Results</h2>
+        <div style={styles.headerInfo}>
+          <span style={styles.badge}>
+            {analysis.modelType?.toUpperCase() || 'OLS'}
+          </span>
+          <span style={styles.processingTime}>
+            ⏱️ {analysis.processingTime}ms
+          </span>
+        </div>
+      </div>
+
+      {/* Main Content - Split Screen with Tabs */}
+      <div style={styles.mainContent}>
+        {/* Left Panel - Tabbed Content */}
+        <div style={styles.leftPanel}>
+          {/* Tabs */}
+          <div style={styles.tabs}>
             <button
-              onClick={() => navigate('/')}
-              className="p-2 hover:bg-slate-700 rounded-lg transition-colors"
+              style={{
+                ...styles.tab,
+                ...(activeTab === 'interpretation' ? styles.activeTab : {})
+              }}
+              onClick={() => setActiveTab('interpretation')}
             >
-              <ArrowLeft className="w-6 h-6" />
+              💡 AI Interpretation
             </button>
-            <div>
-              <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent">
-                Analysis Results
-              </h1>
-              <p className="text-gray-400 mt-1">
-                {results.formula} • {results.model_type.toUpperCase()}
-              </p>
-            </div>
+            <button
+              style={{
+                ...styles.tab,
+                ...(activeTab === 'output' ? styles.activeTab : {})
+              }}
+              onClick={() => setActiveTab('output')}
+            >
+              📊 Statistical Output
+            </button>
+            <button
+              style={{
+                ...styles.tab,
+                ...(activeTab === 'visualizations' ? styles.activeTab : {})
+              }}
+              onClick={() => setActiveTab('visualizations')}
+            >
+              📈 Visualizations
+            </button>
+            <button
+              style={{
+                ...styles.tab,
+                ...(activeTab === 'code' ? styles.activeTab : {})
+              }}
+              onClick={() => setActiveTab('code')}
+            >
+              💻 R Code
+            </button>
           </div>
-          
-          <div className="flex gap-3">
-            <button onClick={downloadCSV} className="btn-secondary flex items-center gap-2">
-              <Download className="w-4 h-4" />
-              CSV
-            </button>
-            <button onClick={downloadResults} className="btn-primary flex items-center gap-2">
-              <Download className="w-4 h-4" />
-              JSON
-            </button>
-          </div>
-        </div>
 
-        {/* Model Quality Banner */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="card mb-8"
-        >
-          <div className="flex items-start gap-4">
-            <div className={`p-3 rounded-lg ${
-              results.ai_interpretation.model_quality.rating === 'excellent' 
-                ? 'bg-green-500/20' 
-                : 'bg-yellow-500/20'
-            }`}>
-              <CheckCircle className={`w-8 h-8 ${
-                results.ai_interpretation.model_quality.rating === 'excellent'
-                  ? 'text-green-400'
-                  : 'text-yellow-400'
-              }`} />
-            </div>
-            <div className="flex-1">
-              <h3 className="text-xl font-semibold mb-2">
-                Model Quality: <span className="capitalize text-green-400">
-                  {results.ai_interpretation.model_quality.rating}
-                </span>
-              </h3>
-              <p className="text-gray-300">
-                {results.ai_interpretation.model_quality.explanation}
-              </p>
-            </div>
-          </div>
-        </motion.div>
-
-        {/* Grid Layout */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-          {/* Model Statistics */}
-          <motion.div
-            initial={{ opacity: 0, x: -20 }}
-            animate={{ opacity: 1, x: 0 }}
-            className="card"
-          >
-            <h3 className="text-xl font-semibold mb-4 flex items-center gap-2">
-              <TrendingUp className="w-5 h-5 text-blue-400" />
-              Model Statistics
-            </h3>
-            <div className="grid grid-cols-2 gap-4">
-              {Object.entries(results.glance).map(([key, value]) => (
-                <div key={key} className="bg-slate-700/30 rounded-lg p-4">
-                  <StatTooltip term={key} value={value}>
-                    <p className="text-sm text-gray-400 mb-1">
-                      {key.replace(/\./g, ' ').toUpperCase()}
-                    </p>
-                  </StatTooltip>
-                  <p className="text-2xl font-bold">
-                    {typeof value === 'number' ? value.toFixed(4) : value}
-                  </p>
+          {/* Tab Content */}
+          <div style={styles.tabContent}>
+            {/* Interpretation Tab */}
+            {activeTab === 'interpretation' && (
+              <div style={styles.interpretationPanel}>
+                <h3 style={styles.panelTitle}>Plain-Language Interpretation</h3>
+                <div style={styles.interpretationText}>
+                  {interpretation || 'No interpretation available'}
                 </div>
-              ))}
-            </div>
-          </motion.div>
+              </div>
+            )}
 
-          {/* Coefficient Plot */}
-          <motion.div
-            initial={{ opacity: 0, x: 20 }}
-            animate={{ opacity: 1, x: 0 }}
-            className="card"
-          >
-            <h3 className="text-xl font-semibold mb-4 flex items-center gap-2">
-              <BarChart3 className="w-5 h-5 text-purple-400" />
-              Coefficient Estimates
-            </h3>
-            <ResponsiveContainer width="100%" height={250}>
-              <BarChart data={results.tidy.filter(d => d.term !== '(Intercept)')}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
-                <XAxis dataKey="term" stroke="#94a3b8" />
-                <YAxis stroke="#94a3b8" />
-                <Tooltip
-                  contentStyle={{
-                    backgroundColor: '#1e293b',
-                    border: '1px solid #475569',
-                    borderRadius: '8px'
-                  }}
-                />
-                <Bar dataKey="estimate" radius={[8, 8, 0, 0]}>
-                  {results.tidy.filter(d => d.term !== '(Intercept)').map((entry, index) => (
-                    <Cell 
-                      key={`cell-${index}`}
-                      fill={entry.estimate > 0 ? '#10b981' : '#ef4444'}
-                    />
-                  ))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          </motion.div>
+            {/* Statistical Output Tab */}
+            {activeTab === 'output' && (
+              <div style={styles.outputPanel}>
+                {/* Coefficients Section */}
+                <div style={styles.section}>
+                  <h3 style={styles.sectionTitle}>Regression Coefficients</h3>
+                  {formatCoefficients(results.tidy)}
+                  <p style={styles.note}>* Indicates statistical significance (p &lt; 0.05)</p>
+                </div>
+
+                {/* Model Diagnostics */}
+                <div style={styles.section}>
+                  <h3 style={styles.sectionTitle}>Model Diagnostics</h3>
+                  {formatDiagnostics(results.glance)}
+                </div>
+              </div>
+            )}
+
+            {/* NEW: Visualizations Tab */}
+            {activeTab === 'visualizations' && (
+              <div style={styles.visualizationsPanel}>
+                {/* Coefficient Plot */}
+                {results.tidy && results.tidy.length > 0 && (
+                  <div style={styles.section}>
+                    <ChartContainer 
+                      title="Coefficient Estimates with Confidence Intervals"
+                      info="Shows regression coefficients with 95% confidence intervals. Green indicates positive significant effects, red indicates negative significant effects, gray indicates non-significant effects."
+                    >
+                      <CoefficientPlot coefficients={prepareCoefficientsForChart(results.tidy)} />
+                    </ChartContainer>
+                  </div>
+                )}
+
+                {/* Residuals Plot */}
+                {prepareResidualsData(results) && (
+                  <div style={styles.section}>
+                    <ChartContainer 
+                      title="Residuals vs Fitted Values"
+                      info="Diagnostic plot showing residuals against fitted values. Points should be randomly scattered around the zero line for a good model fit."
+                    >
+                      <ResidualsPlot data={prepareResidualsData(results)} />
+                    </ChartContainer>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* R Code Tab */}
+            {activeTab === 'code' && (
+              <div style={styles.codePanel}>
+                <h3 style={styles.panelTitle}>R Code Used</h3>
+                <pre style={styles.codeBlock}>
+                  {results.r_code || 'No R code available'}
+                </pre>
+              </div>
+            )}
+          </div>
         </div>
 
-        {/* Coefficients Table */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.1 }}
-          className="card mb-6"
-        >
-          <h3 className="text-xl font-semibold mb-4">Regression Coefficients</h3>
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead className="border-b border-slate-600">
-                <tr>
-                  <th className="text-left py-3 px-4">Term</th>
-                  <th className="text-right py-3 px-4">
-                    <StatTooltip term="estimate">
-                      <span className="cursor-help">Estimate</span>
-                    </StatTooltip>
-                  </th>
-                  <th className="text-right py-3 px-4">
-                    <StatTooltip term="std.error">
-                      <span className="cursor-help">Std. Error</span>
-                    </StatTooltip>
-                  </th>
-                  <th className="text-right py-3 px-4">
-                    <StatTooltip term="t.statistic">
-                      <span className="cursor-help">t-Statistic</span>
-                    </StatTooltip>
-                  </th>
-                  <th className="text-right py-3 px-4">
-                    <StatTooltip term="p.value">
-                      <span className="cursor-help">P-Value</span>
-                    </StatTooltip>
-                  </th>
-                  <th className="text-center py-3 px-4">Significance</th>
-                </tr>
-              </thead>
-              <tbody>
-                {results.tidy.map((row, i) => (
-                  <tr key={i} className="border-b border-slate-700/50 hover:bg-slate-700/30 transition-colors">
-                    <td className="py-3 px-4 font-mono">{row.term}</td>
-                    <td className="text-right py-3 px-4 font-semibold">
-                      {row.estimate.toFixed(4)}
-                    </td>
-                    <td className="text-right py-3 px-4 text-gray-400">
-                      {row['std.error']?.toFixed(4)}
-                    </td>
-                    <td className="text-right py-3 px-4 text-gray-400">
-                      {row.statistic?.toFixed(4)}
-                    </td>
-                    <td className={`text-right py-3 px-4 font-semibold ${
-                      row['p.value'] < 0.001 ? 'text-green-400' :
-                      row['p.value'] < 0.05 ? 'text-yellow-400' :
-                      'text-gray-400'
-                    }`}>
-                      {row['p.value'] < 0.001 ? '< 0.001' : row['p.value']?.toFixed(4)}
-                    </td>
-                    <td className="text-center py-3 px-4">
-                      {row['p.value'] < 0.001 && '***'}
-                      {row['p.value'] >= 0.001 && row['p.value'] < 0.01 && '**'}
-                      {row['p.value'] >= 0.01 && row['p.value'] < 0.05 && '*'}
-                      {row['p.value'] >= 0.05 && row['p.value'] < 0.1 && '.'}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            <p className="text-xs text-gray-500 mt-2">
-              Significance codes: 0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
-            </p>
-          </div>
-        </motion.div>
-
-        {/* Residuals Plot */}
-        {results.residuals && (
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.2 }}
-            className="card mb-6"
-          >
-            <h3 className="text-xl font-semibold mb-4">Residual Plot</h3>
-            <ResponsiveContainer width="100%" height={300}>
-              <ScatterChart>
-                <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
-                <XAxis 
-                  dataKey="fitted" 
-                  name="Fitted Values"
-                  stroke="#94a3b8"
-                  label={{ value: 'Fitted Values', position: 'insideBottom', offset: -5 }}
-                />
-                <YAxis 
-                  dataKey="residual" 
-                  name="Residuals"
-                  stroke="#94a3b8"
-                  label={{ value: 'Residuals', angle: -90, position: 'insideLeft' }}
-                />
-                <Tooltip
-                  contentStyle={{
-                    backgroundColor: '#1e293b',
-                    border: '1px solid #475569',
-                    borderRadius: '8px'
-                  }}
-                />
-                <Scatter data={results.residuals} fill="#8b5cf6" />
-                <Line 
-                  type="monotone" 
-                  dataKey={() => 0} 
-                  stroke="#ef4444" 
-                  strokeDasharray="5 5"
-                  dot={false}
-                />
-              </ScatterChart>
-            </ResponsiveContainer>
-          </motion.div>
-        )}
-
-        {/* AI Interpretation */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.3 }}
-          className="card"
-        >
-          <div className="flex items-center gap-3 mb-6">
-            <div className="p-3 bg-purple-500/20 rounded-lg">
-              <Sparkles className="w-6 h-6 text-purple-400" />
+        {/* Right Panel - Summary Card */}
+        <div style={styles.rightPanel}>
+          <div style={styles.summaryCard}>
+            <h3 style={styles.panelTitle}>Analysis Summary</h3>
+            
+            <div style={styles.summaryItem}>
+              <span style={styles.summaryLabel}>Model Type</span>
+              <span style={styles.summaryValue}>
+                {analysis.modelType?.toUpperCase() || 'OLS'}
+              </span>
             </div>
-            <h3 className="text-xl font-semibold">AI Interpretation</h3>
-          </div>
-
-          {/* Summary */}
-          <div className="mb-6 p-4 bg-slate-700/30 rounded-lg">
-            <h4 className="font-semibold mb-2 text-blue-400">Summary</h4>
-            <p className="text-gray-300 leading-relaxed">
-              {results.ai_interpretation.summary}
-            </p>
+            
+            <div style={styles.summaryItem}>
+              <span style={styles.summaryLabel}>Dependent Variable</span>
+              <span style={styles.summaryValue}>{analysis.dependentVar}</span>
+            </div>
+            
+            <div style={styles.summaryItem}>
+              <span style={styles.summaryLabel}>Independent Variables</span>
+              <span style={styles.summaryValue}>
+                {analysis.independentVars?.join(', ')}
+              </span>
+            </div>
+            
+            <div style={styles.summaryItem}>
+              <span style={styles.summaryLabel}>Status</span>
+              <span style={{
+                ...styles.statusBadge,
+                backgroundColor: '#00ff00'
+              }}>
+                {analysis.status}
+              </span>
+            </div>
+            
+            <div style={styles.summaryItem}>
+              <span style={styles.summaryLabel}>Processing Time</span>
+              <span style={styles.summaryValue}>{analysis.processingTime}ms</span>
+            </div>
           </div>
 
           {/* Key Findings */}
-          <div className="mb-6">
-            <h4 className="font-semibold mb-3 text-green-400">Key Findings</h4>
-            <ul className="space-y-2">
-              {results.ai_interpretation.key_findings.map((finding, i) => (
-                <li key={i} className="flex items-start gap-3">
-                  <CheckCircle className="w-5 h-5 text-green-400 flex-shrink-0 mt-0.5" />
-                  <span className="text-gray-300">{finding}</span>
-                </li>
-              ))}
-            </ul>
+          <div style={styles.keyFindings}>
+            <h4 style={styles.findingsTitle}>Key Findings</h4>
+            {results.tidy && results.tidy.filter(r => r['p.value'] < 0.05).length > 0 ? (
+              results.tidy
+                .filter(r => r['p.value'] < 0.05)
+                .map((r, i) => (
+                  <div key={i} style={styles.finding}>
+                    <strong>{r.term}</strong> is statistically significant (p = {r['p.value'].toFixed(4)})
+                  </div>
+                ))
+            ) : (
+              <p style={styles.finding}>No statistically significant predictors found</p>
+            )}
           </div>
 
-          {/* Recommendations */}
-          <div>
-            <h4 className="font-semibold mb-3 text-yellow-400">Recommendations</h4>
-            <ul className="space-y-2">
-              {results.ai_interpretation.recommendations.map((rec, i) => (
-                <li key={i} className="flex items-start gap-3">
-                  <TrendingUp className="w-5 h-5 text-yellow-400 flex-shrink-0 mt-0.5" />
-                  <span className="text-gray-300">{rec}</span>
-                </li>
-              ))}
-            </ul>
+          {/* Actions */}
+          <div style={styles.actions}>
+            <button
+              style={styles.actionButton}
+              onClick={() => downloadResults(analysis)}
+            >
+              📥 Download Results
+            </button>
+            <button
+              style={{...styles.actionButton, ...styles.secondaryButton}}
+              onClick={() => navigate('/dashboard')}
+            >
+              🏠 Back to Dashboard
+            </button>
+            <button
+              style={{...styles.actionButton, ...styles.secondaryButton}}
+              onClick={() => navigate('/configure')}
+            >
+              🔄 New Analysis
+            </button>
           </div>
-        </motion.div>
+        </div>
       </div>
     </div>
   );
-}
+};
+
+const styles = {
+  container: {
+    minHeight: '100vh',
+    backgroundColor: '#0a0a0a',
+    color: '#fff',
+    fontFamily: 'Poppins, sans-serif',
+  },
+  header: {
+    backgroundColor: '#1a1a1a',
+    borderBottom: '2px solid #00ff00',
+    padding: '20px 40px',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '20px',
+  },
+  backButton: {
+    padding: '8px 16px',
+    backgroundColor: '#333',
+    color: '#fff',
+    border: 'none',
+    borderRadius: '6px',
+    cursor: 'pointer',
+    fontSize: '14px',
+  },
+  title: {
+    margin: 0,
+    fontSize: '24px',
+    color: '#00ff00',
+    flex: 1,
+  },
+  headerInfo: {
+    display: 'flex',
+    gap: '15px',
+    alignItems: 'center',
+  },
+  badge: {
+    padding: '6px 12px',
+    backgroundColor: '#00ff00',
+    color: '#000',
+    borderRadius: '4px',
+    fontSize: '12px',
+    fontWeight: 'bold',
+  },
+  processingTime: {
+    fontSize: '14px',
+    color: '#888',
+  },
+  mainContent: {
+    display: 'flex',
+    height: 'calc(100vh - 84px)',
+  },
+  leftPanel: {
+    flex: 1,
+    backgroundColor: '#0a0a0a',
+    display: 'flex',
+    flexDirection: 'column',
+  },
+  rightPanel: {
+    flex: '0 0 400px',
+    backgroundColor: '#1a1a1a',
+    borderLeft: '2px solid #333',
+    overflowY: 'auto',
+    padding: '30px',
+  },
+  tabs: {
+    display: 'flex',
+    backgroundColor: '#1a1a1a',
+    borderBottom: '2px solid #333',
+  },
+  tab: {
+    flex: 1,
+    padding: '15px',
+    backgroundColor: 'transparent',
+    color: '#888',
+    border: 'none',
+    borderBottom: '3px solid transparent',
+    cursor: 'pointer',
+    fontSize: '14px',
+    fontWeight: '500',
+    transition: 'all 0.3s ease',
+  },
+  activeTab: {
+    color: '#00ff00',
+    borderBottomColor: '#00ff00',
+    backgroundColor: '#0a0a0a',
+  },
+  tabContent: {
+    flex: 1,
+    overflowY: 'auto',
+    padding: '30px',
+  },
+  interpretationPanel: {},
+  panelTitle: {
+    fontSize: '18px',
+    marginBottom: '20px',
+    color: '#00ff00',
+  },
+  interpretationText: {
+    fontSize: '16px',
+    lineHeight: '1.8',
+    color: '#ddd',
+    backgroundColor: '#1a1a1a',
+    padding: '20px',
+    borderRadius: '8px',
+    border: '1px solid #333',
+    whiteSpace: 'pre-wrap',
+  },
+  codePanel: {},
+  codeBlock: {
+    backgroundColor: '#1a1a1a',
+    border: '1px solid #333',
+    borderRadius: '8px',
+    padding: '20px',
+    fontSize: '14px',
+    fontFamily: 'monospace',
+    color: '#00ff00',
+    overflowX: 'auto',
+    lineHeight: '1.6',
+  },
+  outputPanel: {},
+  visualizationsPanel: {},
+  section: {
+    marginBottom: '30px',
+  },
+  sectionTitle: {
+    fontSize: '16px',
+    marginBottom: '15px',
+    color: '#00ff00',
+    borderBottom: '1px solid #333',
+    paddingBottom: '8px',
+  },
+  resultTable: {
+    width: '100%',
+    borderCollapse: 'collapse',
+    backgroundColor: '#1a1a1a',
+    borderRadius: '8px',
+    overflow: 'hidden',
+  },
+  resultTh: {
+    padding: '12px',
+    textAlign: 'left',
+    backgroundColor: '#222',
+    color: '#00ff00',
+    fontWeight: '600',
+    borderBottom: '2px solid #333',
+  },
+  resultTr: {
+    borderBottom: '1px solid #333',
+  },
+  resultTd: {
+    padding: '10px 12px',
+    color: '#ddd',
+    fontSize: '14px',
+  },
+  note: {
+    marginTop: '10px',
+    fontSize: '12px',
+    color: '#888',
+    fontStyle: 'italic',
+  },
+  diagnosticsGrid: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+    gap: '15px',
+  },
+  statCard: {
+    backgroundColor: '#1a1a1a',
+    border: '1px solid #333',
+    borderRadius: '8px',
+    padding: '15px',
+    textAlign: 'center',
+  },
+  statLabel: {
+    fontSize: '12px',
+    color: '#888',
+    marginBottom: '8px',
+  },
+  statValue: {
+    fontSize: '24px',
+    fontWeight: 'bold',
+    color: '#00ff00',
+    marginBottom: '5px',
+  },
+  statHint: {
+    fontSize: '11px',
+    color: '#666',
+  },
+  summaryCard: {
+    backgroundColor: '#222',
+    border: '1px solid #333',
+    borderRadius: '8px',
+    padding: '20px',
+    marginBottom: '20px',
+  },
+  summaryItem: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    marginBottom: '15px',
+    paddingBottom: '15px',
+    borderBottom: '1px solid #333',
+  },
+  summaryLabel: {
+    color: '#888',
+    fontSize: '14px',
+  },
+  summaryValue: {
+    color: '#ddd',
+    fontSize: '14px',
+    fontWeight: '600',
+  },
+  statusBadge: {
+    padding: '4px 12px',
+    borderRadius: '12px',
+    fontSize: '12px',
+    fontWeight: 'bold',
+    color: '#000',
+  },
+  keyFindings: {
+    backgroundColor: '#222',
+    border: '1px solid #333',
+    borderRadius: '8px',
+    padding: '20px',
+    marginBottom: '20px',
+  },
+  findingsTitle: {
+    fontSize: '16px',
+    marginBottom: '15px',
+    color: '#00ff00',
+  },
+  finding: {
+    fontSize: '14px',
+    lineHeight: '1.6',
+    color: '#ddd',
+    marginBottom: '12px',
+    paddingLeft: '10px',
+    borderLeft: '3px solid #00ff00',
+  },
+  actions: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '10px',
+  },
+  actionButton: {
+    padding: '12px',
+    backgroundColor: '#00ff00',
+    color: '#000',
+    border: 'none',
+    borderRadius: '6px',
+    fontSize: '14px',
+    fontWeight: '600',
+    cursor: 'pointer',
+  },
+  secondaryButton: {
+    backgroundColor: '#333',
+    color: '#fff',
+  },
+  loadingContainer: {
+    display: 'flex',
+    flexDirection: 'column',
+    justifyContent: 'center',
+    alignItems: 'center',
+    height: '100vh',
+    backgroundColor: '#0a0a0a',
+    color: '#fff',
+    fontFamily: 'Poppins, sans-serif',
+  },
+  spinner: {
+    border: '4px solid #333',
+    borderTop: '4px solid #00ff00',
+    borderRadius: '50%',
+    width: '50px',
+    height: '50px',
+    animation: 'spin 1s linear infinite',
+    marginBottom: '20px',
+  },
+  errorContainer: {
+    display: 'flex',
+    flexDirection: 'column',
+    justifyContent: 'center',
+    alignItems: 'center',
+    height: '100vh',
+    backgroundColor: '#0a0a0a',
+    color: '#fff',
+    fontFamily: 'Poppins, sans-serif',
+    textAlign: 'center',
+    padding: '40px',
+  },
+};
+
+export default Results;

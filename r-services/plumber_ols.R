@@ -1,13 +1,38 @@
 # plumber_ols.R - OLS Regression Service
 # Port: 8000
-
+# FIXED: Accepts inline data parameter
 library(plumber)
 library(broom)
-library(readr)
-library(readxl)
+library(jsonlite)
 
 #* @apiTitle OLS Regression Service
 #* @apiDescription Performs Ordinary Least Squares regression analysis
+
+# ---------------- CORS Filter ----------------
+#* @filter cors
+function(req, res) {
+  res$setHeader("Access-Control-Allow-Origin", "*")
+  res$setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+  res$setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization")
+  
+  if (req$REQUEST_METHOD == "OPTIONS") {
+    res$status <- 200
+    return(list())
+  }
+  
+  plumber::forward()
+}
+
+# ---------------- Helper to parse body ----------------
+parse_body <- function(req) {
+  body <- tryCatch(
+    jsonlite::fromJSON(req$postBody, simplifyVector = FALSE),
+    error = function(e) NULL
+  )
+  return(body)
+}
+
+# ---------------- Endpoints ----------------
 
 #* Health check
 #* @get /ping
@@ -15,65 +40,105 @@ function() {
   list(
     status = "healthy",
     service = "ols",
-    timestamp = Sys.time()
+    port = 8000,
+    timestamp = format(Sys.time(), "%Y-%m-%d %H:%M:%S")
   )
 }
 
 #* Perform OLS regression
-#* @param data_path Path to the data file
-#* @param dependent_var Name of the dependent variable
-#* @param independent_vars List of independent variable names (comma-separated or array)
 #* @post /ols
-function(req, res, data_path, dependent_var, independent_vars) {
+function(req, res) {
   tryCatch({
-    # Validate inputs
-    if (missing(data_path) || missing(dependent_var) || missing(independent_vars)) {
+    # Parse JSON body
+    body <- parse_body(req)
+    
+    if (is.null(body)) {
       res$status <- 400
-      return(list(error = "Missing required parameters"))
+      return(list(error = "Invalid JSON body"))
     }
     
-    # Load data
+    # Get parameters
+    inline_data <- body$data
+    data_path <- body$data_path
+    dependent_var <- body$dependent_var
+    independent_vars <- body$independent_vars
+    formula_str <- body$formula
+    
+    # Load data - prefer inline data over file path
     data <- NULL
-    if (grepl("\\.csv$", data_path, ignore.case = TRUE)) {
-      data <- read_csv(data_path, show_col_types = FALSE)
-    } else if (grepl("\\.xlsx?$", data_path, ignore.case = TRUE)) {
-      data <- read_excel(data_path)
-    } else {
+    
+    if (!is.null(inline_data) && length(inline_data) > 0) {
+      # Convert inline JSON data to data frame
+      data <- tryCatch({
+        df <- do.call(rbind, lapply(inline_data, function(row) {
+          as.data.frame(row, stringsAsFactors = FALSE)
+        }))
+        # Ensure numeric columns are numeric
+        for (col in names(df)) {
+          if (is.character(df[[col]])) {
+            numeric_vals <- suppressWarnings(as.numeric(df[[col]]))
+            if (!all(is.na(numeric_vals))) {
+              df[[col]] <- numeric_vals
+            }
+          }
+        }
+        df
+      }, error = function(e) {
+        message("Error parsing inline data: ", e$message)
+        NULL
+      })
+    } else if (!is.null(data_path)) {
+      # Try to load from file
+      data <- tryCatch({
+        if (grepl("\\.csv$", data_path, ignore.case = TRUE)) {
+          read.csv(data_path, stringsAsFactors = FALSE)
+        } else if (grepl("\\.xlsx?$", data_path, ignore.case = TRUE)) {
+          if (requireNamespace("readxl", quietly = TRUE)) {
+            readxl::read_excel(data_path)
+          } else {
+            stop("readxl package not available")
+          }
+        } else {
+          stop("Unsupported file format")
+        }
+      }, error = function(e) {
+        message("Error loading file: ", e$message)
+        NULL
+      })
+    }
+    
+    if (is.null(data) || nrow(data) == 0) {
       res$status <- 400
-      return(list(error = "Unsupported file format. Use CSV or XLSX."))
-    }
-    
-    # Parse independent variables if comma-separated string
-    if (is.character(independent_vars)) {
-      if (grepl(",", independent_vars)) {
-        independent_vars <- trimws(strsplit(independent_vars, ",")[[1]])
-      } else {
-        independent_vars <- c(independent_vars)
-      }
-    }
-    
-    # Verify columns exist
-    missing_cols <- c()
-    if (!dependent_var %in% names(data)) {
-      missing_cols <- c(missing_cols, dependent_var)
-    }
-    for (var in independent_vars) {
-      if (!var %in% names(data)) {
-        missing_cols <- c(missing_cols, var)
-      }
-    }
-    
-    if (length(missing_cols) > 0) {
-      res$status <- 400
-      return(list(
-        error = "Variables not found in data",
-        missing_variables = missing_cols
-      ))
+      return(list(error = "No data provided or data could not be loaded"))
     }
     
     # Build formula
-    formula_str <- paste(dependent_var, "~", paste(independent_vars, collapse = " + "))
-    model_formula <- as.formula(formula_str)
+    if (!is.null(formula_str)) {
+      # Use provided formula string
+      model_formula <- as.formula(formula_str)
+    } else if (!is.null(dependent_var) && !is.null(independent_vars)) {
+      # Build formula from dependent/independent vars
+      if (is.list(independent_vars)) {
+        independent_vars <- unlist(independent_vars)
+      }
+      formula_str <- paste(dependent_var, "~", paste(independent_vars, collapse = " + "))
+      model_formula <- as.formula(formula_str)
+    } else {
+      res$status <- 400
+      return(list(error = "Provide either 'formula' or 'dependent_var' + 'independent_vars'"))
+    }
+    
+    # Verify columns exist
+    formula_vars <- all.vars(model_formula)
+    missing_vars <- setdiff(formula_vars, names(data))
+    if (length(missing_vars) > 0) {
+      res$status <- 400
+      return(list(
+        error = "Variables not found in data",
+        missing = missing_vars,
+        available = names(data)
+      ))
+    }
     
     # Fit OLS model
     model <- lm(model_formula, data = data)
@@ -82,27 +147,27 @@ function(req, res, data_path, dependent_var, independent_vars) {
     tidy_results <- tidy(model, conf.int = TRUE)
     glance_results <- glance(model)
     
-    # Generate R code for reproducibility
-    r_code <- paste0(
-      "# OLS Regression Analysis\n",
-      "# Generated: ", format(Sys.time(), "%Y-%m-%d %H:%M:%S"), "\n\n",
-      "library(readr)\n",
-      "library(broom)\n\n",
-      "# Load data\n",
-      "data <- read_csv('", basename(data_path), "')\n\n",
-      "# Fit model\n",
-      "model <- lm(", formula_str, ", data = data)\n\n",
-      "# View results\n",
-      "summary(model)\n",
-      "tidy(model, conf.int = TRUE)\n",
-      "glance(model)\n"
-    )
-    
     # Add diagnostics
     diagnostics <- list(
       residuals = as.numeric(residuals(model)),
       fitted = as.numeric(fitted(model)),
       standardized_residuals = as.numeric(rstandard(model))
+    )
+    
+    # Generate R code for reproducibility
+    r_code <- paste0(
+      "# OLS Regression Analysis\n",
+      "# Generated by StatsMate\n\n",
+      "library(broom)\n\n",
+      "# Load your data\n",
+      "data <- read.csv('your_data.csv')\n\n",
+      "# Fit model\n",
+      "model <- lm(", formula_str, ", data = data)\n\n",
+      "# View results\n",
+      "summary(model)\n",
+      "tidy(model, conf.int = TRUE)\n",
+      "glance(model)\n",
+      "confint(model)\n"
     )
     
     # Return results
@@ -126,25 +191,14 @@ function(req, res, data_path, dependent_var, independent_vars) {
     )
   })
 }
-#* Health check
+
+#* Health check endpoint
 #* @get /health
 function() {
   list(
     status = "healthy",
     service = "r-ols",
-    timestamp = Sys.time()
-  )
-}
-
-#* Root endpoint
-#* @get /
-function() {
-  list(
-    message = "OLS Regression Service",
-    version = "1.0.0",
-    endpoints = list(
-      health = "GET /health",
-      analyze = "POST /analyze"
-    )
+    port = 8000,
+    timestamp = format(Sys.time(), "%Y-%m-%d %H:%M:%S")
   )
 }

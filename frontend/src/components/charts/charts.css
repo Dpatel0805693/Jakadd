@@ -1,0 +1,89 @@
+/* ============================================================================
+   charts.css
+   ----------------------------------------------------------------------------
+   PURPOSE:
+     Shared CSS for chart containers, headers, loading states, and responsive
+     adjustments. Mirrors the CSS examples in your guide.  */
+/* Container + header (from guide) */ /*  */
+.chart-container {
+  background: #FFFFFF;
+  border-radius: 8px;
+  padding: 20px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+  margin-bottom: 24px;
+}
+.chart-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+.chart-header h3 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+}
+.info-button {
+  background: none;
+  border: none;
+  cursor: help;
+  font-size: 18px;
+}
+.chart-content {
+  min-height: 300px;
+}
+
+/* Error state */
+.chart-error {
+  padding: 20px;
+  text-align: center;
+  color: #9CA3AF;
+  font-style: italic;
+  background: #F9FAFB;
+  border-radius: 6px;
+}
+
+/* Optional interpretation box */
+.chart-interpretation {
+  margin-top: 16px;
+  padding: 12px;
+  background: #F9FAFB;
+  border-left: 3px solid #3B82F6;
+  border-radius: 4px;
+}
+.chart-interpretation h4 {
+  margin-top: 0;
+  font-size: 14px;
+  font-weight: 600;
+}
+.chart-interpretation ul {
+  margin: 8px 0;
+  padding-left: 20px;
+  font-size: 14px;
+}
+
+/* Loading spinner */
+.chart-loading {
+  display: grid;
+  place-items: center;
+  gap: 12px;
+  padding: 32px 0;
+  color: #6B7280;
+}
+.spinner {
+  width: 28px;
+  height: 28px;
+  border: 3px solid #E5E7EB;
+  border-top: 3px solid #3B82F6;
+  border-radius: 50%;
+  animation: spin 0.9s linear infinite;
+}
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Responsive (from guide) */ /*  */
+@media (max-width: 768px) {
+  .chart-container { padding: 12px; }
+  .chart-content { min-height: 250px; }
+}

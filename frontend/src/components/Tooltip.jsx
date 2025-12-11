@@ -1,129 +1,156 @@
-// components/Tooltip.jsx - Simple right-positioned tooltip
 import { useState } from 'react';
-import { HelpCircle, Sparkles } from 'lucide-react';
+import { HelpCircle } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { createPortal } from 'react-dom';
 
+// Educational definitions for statistical terms
 const STAT_DEFINITIONS = {
   'r.squared': {
     term: 'R-Squared (R²)',
-    definition: 'Measures how well model explains variation.',
-    explanation: '0-1 scale. Higher = better. 0.80 = 80% explained.',
-    example: 'R² = 0.827 means 82.7% explained.',
+    definition: 'Measures how well the model explains the variation in your data.',
+    explanation: 'Values range from 0 to 1. Higher is better.',
+    example: 'R² = 0.827 means your model explains 82.7% of the variation.',
   },
   'adj.r.squared': {
     term: 'Adjusted R-Squared',
-    definition: 'R² adjusted for number of variables.',
-    explanation: 'Penalizes extra variables.',
-    example: 'Slightly lower than R². Prevents overfitting.',
+    definition: 'R² adjusted for the number of variables in your model.',
+    explanation: 'Penalizes adding unnecessary variables. Use when comparing models.',
+    example: 'Always slightly lower than R². Prevents overfitting.',
+  },
+  'f.statistic': {
+    term: 'F-Statistic',
+    definition: 'Tests if your model is better than just using the average.',
+    explanation: 'Higher values mean your model adds significant explanatory power.',
+    example: 'F = 69.21 with p < 0.001 means the model is highly significant.',
   },
   'p.value': {
     term: 'P-Value',
-    definition: 'Probability result is random.',
-    explanation: 'Lower = better. P < 0.05 = significant.',
-    example: 'P = 0.001 = 0.1% chance random!',
-  },
-  'sigma': {
-    term: 'Std Error',
-    definition: 'Average prediction error.',
-    explanation: 'Lower = better predictions.',
-    example: 'Sigma = 2.5 = ±2.5 error.',
-  },
-  'statistic': {
-    term: 'F-Statistic',
-    definition: 'Tests if model beats average.',
-    explanation: 'Higher = better.',
-    example: 'F = 69, p < 0.05 = works!',
-  },
-  'df': {
-    term: 'Degrees of Freedom',
-    definition: 'Number of predictors.',
-    explanation: 'Count of variables.',
-    example: 'df = 2 means 2 predictors.',
-  },
-  'nobs': {
-    term: 'Observations',
-    definition: 'Data points used.',
-    explanation: 'More = more reliable.',
-    example: 'nobs = 32 = 32 rows.',
+    definition: 'Probability that results occurred by chance.',
+    explanation: 'Lower is better. P < 0.05 means less than 5% chance of randomness.',
+    example: 'P = 0.001 means only 0.1% chance results are random. Very significant!',
   },
   'estimate': {
-    term: 'Coefficient',
-    definition: 'Effect of variable.',
-    explanation: 'Change per unit increase.',
-    example: '-3.88: +1000lb = -3.88 MPG.',
+    term: 'Coefficient Estimate',
+    definition: 'Shows the size and direction of a variable\'s effect.',
+    explanation: 'Positive = variables move together. Negative = opposite directions.',
+    example: 'Estimate = -3.88 for weight means each 1000 lb increase reduces MPG by 3.88.',
   },
   'std.error': {
     term: 'Standard Error',
-    definition: 'Uncertainty in estimate.',
-    explanation: 'Smaller = more precise.',
-    example: 'SE = 0.63 = ±1.26 range.',
+    definition: 'Measures uncertainty in the coefficient estimate.',
+    explanation: 'Smaller is better. Shows how precise the estimate is.',
+    example: 'SE = 0.633 means the true effect is likely within ±0.633 of the estimate.',
   },
   't.statistic': {
-    term: 'T-Statistic',
-    definition: 'Distance from zero.',
-    explanation: 'Beyond ±2 = significant.',
-    example: 't = -6.13 = strong!',
+    term: 't-Statistic',
+    definition: 'Tests if a coefficient is significantly different from zero.',
+    explanation: 'Larger absolute values indicate stronger evidence of an effect.',
+    example: 't = -6.13 means the effect is highly significant (far from zero).',
+  },
+  'significance': {
+    term: 'Significance Stars',
+    definition: 'Visual indicator of statistical significance.',
+    explanation: '*** = p<0.001, ** = p<0.01, * = p<0.05, . = p<0.1',
+    example: '*** means highly significant. Very unlikely due to chance.',
+  },
+  'residual': {
+    term: 'Residual',
+    definition: 'Difference between actual value and model prediction.',
+    explanation: 'Should be randomly scattered around zero for a good model.',
+    example: 'Residual = 0.15 means prediction was 0.15 units too low.',
   },
 };
 
 export default function Tooltip({ term, value, children }) {
-  const [show, setShow] = useState(false);
-  
-  const normalized = term?.toLowerCase().replace(/\s+/g, '.');
-  const def = STAT_DEFINITIONS[normalized];
-  
-  if (!def) return children || <span>{term}</span>;
+  const [isOpen, setIsOpen] = useState(false);
+  const [position, setPosition] = useState({ x: 0, y: 0 });
+  const def = STAT_DEFINITIONS[term];
+
+  if (!def) return children;
+
+  const handleMouseEnter = (e) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    setPosition({
+      x: rect.right + 8, // 8px to the right of element
+      y: rect.top,
+    });
+    setIsOpen(true);
+  };
+
+  const handleMouseLeave = () => {
+    setIsOpen(false);
+  };
 
   return (
-    <div 
-      className="relative inline-block"
-      onMouseEnter={() => setShow(true)}
-      onMouseLeave={() => setShow(false)}
-    >
-      {/* Trigger */}
-      <div className="inline-flex items-center gap-1 cursor-help">
-        {children || <span>{term}</span>}
-        <HelpCircle className="w-3.5 h-3.5 text-gray-400 hover:text-blue-400" />
+    <>
+      <div
+        className="inline-flex items-center gap-1 cursor-help group"
+        onMouseEnter={handleMouseEnter}
+        onMouseLeave={handleMouseLeave}
+      >
+        {children}
+        <HelpCircle className="w-3 h-3 text-slate-500 group-hover:text-violet-400 transition-colors" />
       </div>
 
-      {/* Tooltip - Always appears to the RIGHT */}
-      {show && (
-        <div className="absolute left-full top-0 ml-3 w-64 z-[9999]">
-          <div className="bg-slate-800 border border-slate-600 rounded-lg shadow-2xl p-3 text-left">
-            {/* Header */}
-            <div className="flex items-start justify-between mb-2">
-              <h4 className="font-bold text-blue-400 text-xs">
-                {def.term}
-              </h4>
-              {value !== undefined && (
-                <span className="text-xs font-mono bg-slate-700 px-1.5 py-0.5 rounded ml-2 shrink-0">
-                  {typeof value === 'number' ? value.toFixed(4) : value}
-                </span>
-              )}
-            </div>
+      {isOpen && createPortal(
+        <AnimatePresence>
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.95 }}
+            transition={{ duration: 0.15 }}
+            style={{
+              position: 'fixed',
+              left: `${position.x}px`,
+              top: `${position.y}px`,
+              zIndex: 9999,
+            }}
+            className="w-80"
+            onMouseEnter={() => setIsOpen(true)}
+            onMouseLeave={() => setIsOpen(false)}
+          >
+            <div className="bg-slate-800 border border-slate-700/50 rounded-lg p-4 shadow-2xl">
+              <div className="flex items-start justify-between mb-2">
+                <h4 className="text-sm font-medium text-slate-200">{def.term}</h4>
+                {value !== undefined && (
+                  <span className="text-xs font-mono text-violet-400 ml-2">
+                    {typeof value === 'number' ? value.toFixed(4) : value}
+                  </span>
+                )}
+              </div>
 
-            <div className="space-y-1.5">
-              <p className="text-xs text-gray-300">
-                {def.definition}
-              </p>
-
-              <p className="text-xs text-gray-400">
-                {def.explanation}
-              </p>
-
-              <div className="bg-green-500/10 border border-green-500/30 rounded p-1.5">
-                <p className="text-xs text-green-300">
-                  💡 {def.example}
+              <div className="space-y-2">
+                <p className="text-xs text-slate-300 leading-relaxed">
+                  {def.definition}
                 </p>
+
+                <p className="text-xs text-slate-400 leading-relaxed">
+                  {def.explanation}
+                </p>
+
+                <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-lg p-2">
+                  <p className="text-xs text-emerald-300 leading-relaxed">
+                    💡 {def.example}
+                  </p>
+                </div>
+              </div>
+
+              {/* Arrow pointing left */}
+              <div 
+                style={{
+                  position: 'absolute',
+                  right: '100%',
+                  top: '12px',
+                  marginRight: '-1px',
+                }}
+              >
+                <div className="w-2 h-2 bg-slate-800 border-l border-t border-slate-700/50 rotate-[-45deg]"></div>
               </div>
             </div>
-
-            {/* Arrow pointing left */}
-            <div className="absolute right-full top-3 mr-[-1px]">
-              <div className="w-2 h-2 bg-slate-800 border-l border-t border-slate-600 rotate-[-45deg]"></div>
-            </div>
-          </div>
-        </div>
+          </motion.div>
+        </AnimatePresence>,
+        document.body
       )}
-    </div>
+    </>
   );
 }
