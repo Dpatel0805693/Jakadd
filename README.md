@@ -1,522 +1,537 @@
-# StatsMate R Services
+# 📊 StatsMate - AI-Powered Statistical Analysis Platform
 
-**CSC 230 Project** - Statistical Regression Analysis Services  
-**Team Lead:** Jordano (R/Stats + AI Gateway)  
-**Last Updated:** November 16, 2025
+> **CSC 230 Final Project** | Making regression analysis accessible for everyone
 
----
+StatsMate is a full-stack web application that enables political science students and social science researchers to perform regression analysis without coding expertise. Upload your data, select variables, and get AI-powered interpretations with professional visualizations.
 
-##  Overview
-
-This directory contains three R-based statistical analysis services built with Plumber:
-
-| Service | Port | Purpose | Status |
-|---------|------|---------|--------|
-| **OLS** | 8000 | Ordinary Least Squares regression |  Production |
-| **Logistic** | 8002 | Logistic regression (binary outcomes) |  Production |
-| **Reserved** | 8004 | Future expansion (Probit, Poisson, etc.) |  Planned |
+![StatsMate](https://img.shields.io/badge/Status-Production%20Ready-brightgreen)
+![Docker](https://img.shields.io/badge/Docker-Required-blue)
+![License](https://img.shields.io/badge/License-Educational-orange)
 
 ---
 
-##  Quick Start
+## 🎯 Features
 
-### Option 1: Docker Compose (Recommended)
+| Feature | Description |
+|---------|-------------|
+| **OLS Regression** | Linear regression with R², coefficients, and diagnostics |
+| **Logistic Regression** | Binary outcome analysis with odds ratios |
+| **AI Interpretation** | Plain-language explanations of statistical results |
+| **Interactive Visualizations** | Coefficient plots, residual diagnostics |
+| **Downloadable R Code** | Reproducible analysis scripts |
+| **Educational Tooltips** | Hover explanations for statistical terms |
 
+---
+
+## 📋 Prerequisites
+
+### Required Software
+
+| Software | Version | Download |
+|----------|---------|----------|
+| **Docker Desktop** | 4.0+ | [docker.com/products/docker-desktop](https://www.docker.com/products/docker-desktop) |
+
+### System Requirements
+
+- **OS**: Windows 10/11, macOS 10.15+, or Linux
+- **RAM**: 8GB minimum (16GB recommended)
+- **Disk Space**: 5GB free space
+- **Internet**: Required for first build (downloads Docker images)
+
+### Ports Used
+
+The application uses these ports (must be available):
+
+| Port | Service |
+|------|---------|
+| 5173 | Frontend (React) |
+| 3000 | Core API (Node.js) |
+| 5001 | Integration API |
+| 8000 | R OLS Service |
+| 8001 | AI Gateway |
+| 8002 | R Logistic Service |
+| 8004 | R Reserved Service |
+| 27017 | MongoDB |
+
+---
+
+## 🚀 Quick Start Guide
+
+### Step 1: Install Docker Desktop
+
+1. Download from [docker.com/products/docker-desktop](https://www.docker.com/products/docker-desktop)
+2. Run the installer
+3. **Restart your computer**
+4. Open Docker Desktop and wait for it to fully start
+   - Windows: Look for the whale icon in system tray (should be steady, not animating)
+   - Mac: Look for the whale icon in menu bar
+
+### Step 2: Get the Project Files
+
+**Option A: From Flash Drive**
+```
+Copy the entire "CSC 230 Final Code" folder to your computer
+Example: C:\Projects\CSC 230 Final Code
+```
+
+**Option B: From GitHub**
 ```bash
-# Start all 3 services
+git clone https://github.com/Dpatel0805693/Jakadd.git
+cd Jakadd
+```
+
+### Step 3: Start the Application
+
+**Windows (PowerShell):**
+```powershell
+cd "C:\path\to\CSC 230 Final Code"
 docker-compose up --build
-
-# Verify all services are running
-curl http://localhost:8000/ping  # OLS
-curl http://localhost:8002/ping  # Logistic
-curl http://localhost:8004/ping  # Reserved
 ```
 
-### Option 2: Run Individually (Development)
-
+**Mac/Linux (Terminal):**
 ```bash
-# Terminal 1: OLS Service
-R -e "plumber::plumb('plumber_ols.R')$run(host='0.0.0.0', port=8000)"
+cd /path/to/CSC\ 230\ Final\ Code
+docker-compose up --build
+```
 
-# Terminal 2: Logistic Service
-R -e "plumber::plumb('plumber_logistic.R')$run(host='0.0.0.0', port=8002)"
+**Or double-click `START_STATSMATE.bat`** (Windows only)
 
-# Terminal 3: Reserved Service
-R -e "plumber::plumb('plumber_reserved.R')$run(host='0.0.0.0', port=8004)"
+### Step 4: Wait for Build
+
+First run takes **5-15 minutes** as Docker downloads and builds everything.
+
+Watch for this message indicating success:
+```
+csc230-frontend  | VITE v5.x.x ready in xxx ms
+csc230-frontend  | ➜ Local: http://localhost:5173/
+```
+
+### Step 5: Open StatsMate
+
+🌐 **Open your browser to: [http://localhost:5173](http://localhost:5173)**
+
+---
+
+## 📖 How to Use StatsMate
+
+### 1️⃣ Create an Account
+
+1. Click **"Sign Up"** on the homepage
+2. Enter your email and password
+3. Click **"Create Account"**
+4. Log in with your credentials
+
+### 2️⃣ Upload Your Data
+
+1. Click **"Upload"** in the navigation bar
+2. Click **"Choose File"** and select a CSV file
+3. Wait for the upload confirmation
+4. Your file appears in the dashboard
+
+**Sample data files are included in the `examples/` folder!**
+
+### 3️⃣ Configure Your Analysis
+
+1. Click on your uploaded file
+2. **Select Dependent Variable** (what you want to predict)
+   - For OLS: Choose a continuous variable (e.g., grades, income)
+   - For Logistic: Choose a binary variable (e.g., pass/fail, yes/no)
+3. **Select Independent Variables** (predictors)
+   - Check one or more variables
+4. **Choose Model Type**:
+   - **Linear Regression (OLS)** - for continuous outcomes
+   - **Logistic Regression** - for binary (0/1) outcomes
+
+### 4️⃣ Run Analysis
+
+1. Click **"Run Analysis"**
+2. Wait for processing (typically 1-5 seconds)
+3. View results across four tabs:
+
+| Tab | Contents |
+|-----|----------|
+| **AI Interpretation** | Plain-language summary of findings |
+| **Statistical Output** | Coefficients table, p-values, model diagnostics |
+| **Visualizations** | Coefficient plots, residual plots |
+| **R Code** | Reproducible R script for your analysis |
+
+### 5️⃣ Download Results
+
+Click **"Download Results"** to save your analysis as a file.
+
+---
+
+## 📁 Sample Data Files
+
+Test the application with these included datasets in the `examples/` folder:
+
+| File | Use For | Variables |
+|------|---------|-----------|
+| `student_data.csv` | OLS regression | student_id, study_hours, prior_gpa, attendance_rate, final_grade |
+| `voting_data.csv` | Logistic regression | Binary outcome analysis |
+
+### Example: OLS Analysis
+- **File**: Any CSV with continuous outcome
+- **Dependent**: `final_grade` (or any numeric column)
+- **Independent**: `study_hours`, `prior_gpa`, `attendance_rate`
+- **Model**: Linear Regression (OLS)
+
+### Example: Logistic Analysis
+- **File**: Any CSV with binary (0/1) outcome
+- **Dependent**: `passed` or `voted` (binary column)
+- **Independent**: `study_hours`, `prior_gpa`
+- **Model**: Logistic Regression
+
+---
+
+## 🛠️ Common Commands
+
+### Start Application
+```bash
+docker-compose up --build
+```
+
+### Start in Background
+```bash
+docker-compose up -d --build
+```
+
+### Stop Application
+```bash
+docker-compose down
+```
+
+### View All Logs
+```bash
+docker-compose logs
+```
+
+### View Specific Service Logs
+```bash
+docker-compose logs frontend
+docker-compose logs core-api
+docker-compose logs integration-api
+docker-compose logs r-ols
+docker-compose logs r-logistic
+docker-compose logs mongodb
+```
+
+### Check Running Containers
+```bash
+docker ps
+```
+
+### Restart Everything
+```bash
+docker-compose down
+docker-compose up --build
 ```
 
 ---
 
-## Dependencies
+## ❗ Troubleshooting
 
-All services use the following R packages:
+### Docker Desktop Not Starting
 
-**Core:**
-- `plumber` (API framework)
-- `broom` (standardized regression output)
-- `jsonlite` (JSON parsing)
-- `readr` (fast CSV reading)
-- `readxl` (Excel file support)
+**Windows:**
+1. Ensure virtualization is enabled in BIOS
+2. Install/update WSL2:
+   ```powershell
+   wsl --install
+   wsl --update
+   ```
+3. Restart computer
 
-**Service-Specific:**
-- `car` (VIF calculation for OLS)
-- `sandwich` (robust standard errors for OLS)
-- `margins` (marginal effects for Logistic)
+**Mac:**
+- Ensure you have macOS 10.15 or later
+- Try reinstalling Docker Desktop
 
-Install manually:
-```r
-install.packages(c("plumber", "broom", "readr", "readxl", "car", "sandwich", "margins"))
+### "Port Already in Use" Error
+
+Find and stop the conflicting process:
+
+**Windows:**
+```powershell
+netstat -ano | findstr :5173
+taskkill /PID  /F
+```
+
+**Mac/Linux:**
+```bash
+lsof -i :5173
+kill -9 
+```
+
+### "Cannot Connect to Docker Daemon"
+
+Docker Desktop isn't running. Start it and wait for the whale icon to be steady.
+
+### Build Fails - "No Space Left"
+
+Clean up Docker:
+```bash
+docker system prune -a
+```
+
+### Analysis Fails - "File Not Found"
+
+1. Re-upload your CSV file
+2. Restart the application:
+   ```bash
+   docker-compose down
+   docker-compose up --build
+   ```
+
+### MongoDB Connection Errors
+
+Wait 30 seconds after starting - MongoDB takes time to initialize.
+
+Check if it's healthy:
+```bash
+docker-compose logs mongodb
+```
+
+### R Service Returns 404
+
+Rebuild the R containers:
+```bash
+docker-compose down
+docker-compose up --build r-ols r-logistic
+```
+
+### Logistic Regression "Failed to Converge"
+
+This is a statistical issue, not a bug. It happens when:
+- Your predictors perfectly separate the outcome
+- You need more data
+
+**Solution**: Add more predictor variables or use a larger dataset.
+
+---
+
+## 🏗️ Architecture
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    StatsMate Platform                        │
+├─────────────────────────────────────────────────────────────┤
+│  ┌─────────────┐    ┌─────────────┐    ┌─────────────┐     │
+│  │  Frontend   │    │  Core API   │    │  MongoDB    │     │
+│  │   (React)   │───▶│  (Node.js)  │───▶│  Database   │     │
+│  │  Port 5173  │    │  Port 3000  │    │ Port 27017  │     │
+│  └─────────────┘    └──────┬──────┘    └─────────────┘     │
+│                            │                                 │
+│                            ▼                                 │
+│                   ┌─────────────────┐                       │
+│                   │ Integration API │                       │
+│                   │   Port 5001     │                       │
+│                   └────────┬────────┘                       │
+│                            │                                 │
+│         ┌──────────────────┼──────────────────┐             │
+│         ▼                  ▼                  ▼             │
+│  ┌─────────────┐    ┌─────────────┐    ┌─────────────┐     │
+│  │   R - OLS   │    │ R - Logistic│    │ AI Gateway  │     │
+│  │  Port 8000  │    │  Port 8002  │    │  Port 8001  │     │
+│  └─────────────┘    └─────────────┘    └─────────────┘     │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### Services Overview
+
+| Service | Technology | Purpose |
+|---------|------------|---------|
+| **Frontend** | React, Vite, Tailwind | User interface |
+| **Core API** | Node.js, Express | Authentication, file management |
+| **Integration API** | Node.js, Express | Analysis orchestration |
+| **R-OLS** | R, Plumber | OLS regression analysis |
+| **R-Logistic** | R, Plumber | Logistic regression analysis |
+| **AI Gateway** | Node.js | AI-powered interpretations |
+| **MongoDB** | MongoDB 7 | Data persistence |
+
+---
+
+## 📂 Project Structure
+
+```
+CSC 230 Final Code/
+├── backend/                    # Core API
+│   ├── routes/                 # API endpoints
+│   ├── models/                 # MongoDB schemas
+│   ├── middleware/             # Auth, upload handling
+│   ├── uploads/                # Uploaded CSV files
+│   └── Dockerfile
+├── frontend/                   # React application
+│   ├── src/
+│   │   ├── components/         # Reusable UI components
+│   │   │   └── charts/         # Visualization components
+│   │   ├── pages/              # Page components
+│   │   ├── context/            # Auth context
+│   │   └── services/           # API client
+│   └── Dockerfile
+├── integration-api/            # Analysis orchestration
+│   ├── routes/
+│   │   └── analyzeRoute.js     # Main analysis endpoint
+│   └── Dockerfile
+├── ai-gateway/                 # AI interpretation service
+│   └── Dockerfile
+├── r-services/                 # R statistical services
+│   ├── plumber_ols.R           # OLS regression
+│   ├── plumber_logistic.R      # Logistic regression
+│   ├── Dockerfile.ols
+│   └── Dockerfile.logistic
+├── examples/                   # Sample datasets
+├── docker-compose.yml          # Container orchestration
+└── README.md                   # This file
 ```
 
 ---
 
-## API Documentation
+## 🔐 Environment Variables
+
+Create a `.env` file in the project root (optional):
+
+```env
+# JWT Secret for authentication
+JWT_SECRET=your-super-secret-jwt-key-change-in-production
+
+# OpenAI API Key (optional - enables AI interpretations)
+OPENAI_API_KEY=sk-your-openai-api-key-here
+```
+
+**Note**: The application works without these - defaults are used.
+
+---
+
+## 📊 R Services API Reference
 
 ### OLS Service (Port 8000)
 
-#### Health Check
-```bash
+**Health Check:**
+```
 GET http://localhost:8000/ping
 ```
 
-**Response:**
-```json
-{
-  "status": "healthy",
-  "port": 8000,
-  "service": "OLS"
-}
+**Run Analysis:**
 ```
-
-#### Preview Data
-```bash
-POST http://localhost:8000/preview
-Content-Type: application/json
-
-{
-  "data_path": "/data/survey.csv"
-}
-```
-
-**Response:**
-```json
-{
-  "ok": true,
-  "n": 100,
-  "columns": ["age", "income", "voted"],
-  "dtypes": ["numeric", "numeric", "integer"],
-  "head": [...]
-}
-```
-
-#### Run OLS Regression
-```bash
 POST http://localhost:8000/ols
 Content-Type: application/json
 
 {
-  "data_path": "/data/survey.csv",
-  "formula": "voted ~ age + income",
-  "drop_na": true,
-  "as_factor_fields": ["education"],
-  "include_vif": true
+  "data": [...],           // Inline data array
+  "dependent_var": "y",
+  "independent_vars": ["x1", "x2"]
 }
 ```
-
-**Response (using broom format):**
-```json
-{
-  "ok": true,
-  "n": 98,
-  "formula": "voted ~ age + income",
-  "tidy": [
-    {
-      "term": "(Intercept)",
-      "estimate": 0.45,
-      "std.error": 0.12,
-      "statistic": 3.75,
-      "p.value": 0.0003,
-      "conf.low": 0.21,
-      "conf.high": 0.69
-    },
-    ...
-  ],
-  "glance": {
-    "r.squared": 0.68,
-    "adj.r.squared": 0.67,
-    "sigma": 0.15,
-    "statistic": 98.45,
-    "p.value": 0.0000001,
-    "df": 2,
-    "df.residual": 95,
-    "nobs": 98
-  },
-  "diagnostics": {
-    "residuals": [...],
-    "fitted": [...]
-  },
-  "vif": {
-    "age": 1.2,
-    "income": 1.3
-  },
-  "r_code": "library(broom)\nlibrary(readr)\ndata <- read_csv('/data/survey.csv')\nmodel <- lm(voted ~ age + income, data = data)\ntidy(model, conf.int = TRUE)\nglance(model)"
-}
-```
-
----
 
 ### Logistic Service (Port 8002)
 
-#### Health Check
-```bash
+**Health Check:**
+```
 GET http://localhost:8002/ping
 ```
 
-#### Run Logistic Regression
-```bash
+**Run Analysis:**
+```
 POST http://localhost:8002/logistic
 Content-Type: application/json
 
 {
-  "data_path": "/data/election.csv",
-  "formula": "voted ~ age + income + education",
-  "drop_na": true,
-  "as_factor_fields": ["education"],
-  "exponentiate": true,
-  "include_margins": false
-}
-```
-
-**Response (using broom format):**
-```json
-{
-  "ok": true,
-  "n": 150,
-  "formula": "voted ~ age + income + education",
-  "tidy": [
-    {
-      "term": "(Intercept)",
-      "estimate": 0.23,
-      "std.error": 0.18,
-      "statistic": 1.28,
-      "p.value": 0.20,
-      "conf.low": 0.08,
-      "conf.high": 0.65
-    },
-    {
-      "term": "age",
-      "estimate": 1.05,
-      "std.error": 0.01,
-      "statistic": 4.12,
-      "p.value": 0.00004,
-      "conf.low": 1.03,
-      "conf.high": 1.07
-    }
-  ],
-  "glance": {
-    "null.deviance": 207.89,
-    "df.null": 149,
-    "logLik": -95.34,
-    "AIC": 200.68,
-    "BIC": 213.45,
-    "deviance": 190.68,
-    "df.residual": 146,
-    "nobs": 150
-  },
-  "diagnostics": {
-    "residuals": [...],
-    "fitted": [...]
-  },
-  "r_code": "..."
-}
-```
-
-**Note:** When `exponentiate: true` (default), coefficients are odds ratios. Set to `false` for log-odds.
-
----
-
-### Reserved Service (Port 8004)
-
-#### Health Check
-```bash
-GET http://localhost:8004/ping
-```
-
-#### Info
-```bash
-GET http://localhost:8004/info
-```
-
-**Response:**
-```json
-{
-  "message": "This service is reserved for future statistical methods",
-  "planned_features": [
-    "Probit Regression",
-    "Poisson Regression",
-    "Negative Binomial Regression",
-    "Panel Data Models (Fixed Effects, Random Effects)",
-    "Time Series Analysis",
-    "Instrumental Variables (2SLS)"
-  ],
-  "status": "Coming Soon"
+  "data": [...],           // Inline data array
+  "dependent_var": "outcome",
+  "independent_vars": ["predictor1", "predictor2"]
 }
 ```
 
 ---
 
-## Testing
+## 👥 Development Team
 
-### Run Test Suites
-
-```bash
-# Test OLS service
-Rscript tests/test_ols.R
-
-# Test Logistic service
-Rscript tests/test_logistic.R
-```
-
-### Manual Testing with curl
-
-**Test OLS with mtcars:**
-```bash
-# Create test data
-cat > /tmp/mtcars.csv << EOF
-mpg,wt,hp
-21.0,2.620,110
-21.0,2.875,110
-22.8,2.320,93
-21.4,3.215,110
-18.7,3.440,175
-EOF
-
-# Run regression
-curl -X POST http://localhost:8000/ols \
-  -H "Content-Type: application/json" \
-  -d '{
-    "data_path": "/tmp/mtcars.csv",
-    "formula": "mpg ~ wt + hp",
-    "drop_na": true
-  }' | jq
-```
-
-**Test Logistic with binary outcome:**
-```bash
-# Create test data
-cat > /tmp/binary.csv << EOF
-voted,age,income
-1,25,50000
-0,30,45000
-1,35,60000
-0,40,55000
-1,45,70000
-1,50,75000
-0,28,48000
-1,55,80000
-0,32,52000
-1,60,85000
-EOF
-
-# Run logistic regression
-curl -X POST http://localhost:8002/logistic \
-  -H "Content-Type: application/json" \
-  -d '{
-    "data_path": "/tmp/binary.csv",
-    "formula": "voted ~ age + income",
-    "exponentiate": true
-  }' | jq
-```
+| Name | Role |
+|------|------|
+| **Jordano** | R Stats & AI Gateway Lead, Frontend Tech Lead |
+| **Dhwani** | Frontend UI Lead |
+| **Khalil** | Core API & Database Lead |
+| **Amanda** | Integration & Orchestration Lead |
+| **Anthony** | Data Visualizations Lead |
+| **Darwin** | Documentation Lead |
 
 ---
 
-## Docker Configuration
+## 🎓 For Instructors/Graders
 
-### Dockerfile Structure
+### Verification Steps
 
-Each service has its own Dockerfile:
+1. Start the application:
+   ```bash
+   docker-compose up --build
+   ```
 
-- `Dockerfile.ols` - OLS service with car, sandwich packages
-- `Dockerfile.logistic` - Logistic service with margins package
-- `Dockerfile.reserved` - Minimal reserved service
+2. Verify all 8 containers are running:
+   ```bash
+   docker ps
+   ```
+   Expected: 8 containers (mongodb, core-api, integration-api, ai-gateway, r-ols, r-logistic, r-reserved, frontend)
 
-### Building Images Individually
+3. Open [http://localhost:5173](http://localhost:5173)
 
-```bash
-# Build OLS image
-docker build -f Dockerfile.ols -t statsmate-ols:latest .
+4. Create a test account
 
-# Build Logistic image
-docker build -f Dockerfile.logistic -t statsmate-logistic:latest .
+5. Upload a CSV file from `examples/` folder
 
-# Build Reserved image
-docker build -f Dockerfile.reserved -t statsmate-reserved:latest .
-```
+6. Configure analysis:
+   - Dependent: Choose a numeric column
+   - Independent: Select 1-3 predictor columns
+   - Model: OLS or Logistic
 
-### Volume Mounts
+7. Verify all 4 result tabs display correctly:
+   - ✅ AI Interpretation shows plain-language summary
+   - ✅ Statistical Output shows coefficients table
+   - ✅ Visualizations shows charts
+   - ✅ R Code shows reproducible script
 
-The docker-compose.yml mounts two directories:
+### Key Technical Achievements
 
-- `./data:/data:ro` - Read-only data directory for CSV/XLSX files
-- `./examples:/examples:ro` - Read-only example datasets
-
-**Usage in API calls:**
-```json
-{
-  "data_path": "/data/your_file.csv"
-}
-```
-
----
-
-## Project Structure
-
-```
-r-services/
-├── plumber_ols.R           # OLS service (port 8000)
-├── plumber_logistic.R      # Logistic service (port 8002)
-├── plumber_reserved.R      # Reserved service (port 8004)
-├── Dockerfile.ols          # OLS Docker image
-├── Dockerfile.logistic     # Logistic Docker image
-├── Dockerfile.reserved     # Reserved Docker image
-├── docker-compose.yml      # Orchestration for all 3 services
-├── .dockerignore           # Files to exclude from Docker builds
-├── README.md               # This file
-├── tests/
-│   ├── test_ols.R          # OLS test suite
-│   └── test_logistic.R     # Logistic test suite
-├── data/                   # Data directory (mounted in Docker)
-│   └── survey.csv          # Example dataset
-└── examples/               # Example scripts and datasets
-    ├── example_ols.R
-    └── example_logistic.R
-```
+- ✅ Microservices architecture with 8 Docker containers
+- ✅ Real-time statistical analysis via R/Plumber
+- ✅ JWT authentication
+- ✅ File upload with validation
+- ✅ Interactive data visualizations (Recharts)
+- ✅ AI-powered result interpretation
+- ✅ Reproducible R code generation
+- ✅ Educational tooltip system
 
 ---
 
-## Troubleshooting
+## 📝 Version History
 
-### Service won't start
-
-**Check if port is already in use:**
-```bash
-lsof -i :8000  # OLS
-lsof -i :8002  # Logistic
-lsof -i :8004  # Reserved
-```
-
-**Kill process using port:**
-```bash
-kill -9 $(lsof -t -i:8000)
-```
-
-### Package installation fails
-
-**Install system dependencies first:**
-```bash
-# Ubuntu/Debian
-sudo apt-get install libcurl4-openssl-dev libssl-dev libxml2-dev
-
-# macOS
-brew install curl openssl libxml2
-```
-
-### Data file not found
-
-**Verify file path:**
-- Docker: Files must be in mounted `./data/` directory
-- Local: Use absolute paths like `/tmp/data.csv`
-
-### Broom output format issues
-
-**Verify broom is installed:**
-```r
-library(broom)
-packageVersion("broom")  # Should be >= 1.0.0
-```
+| Version | Date | Changes |
+|---------|------|---------|
+| 1.0.0 | Dec 2025 | Initial release - OLS & Logistic regression |
 
 ---
 
-## Integration with Other Services
+## 🆘 Support
 
-### Called by Integration API (Amanda)
+If you encounter issues:
 
-Amanda's Integration API orchestrates calls to these services:
-
-1. **Type Detection** → AI Gateway (Jordano)
-2. **Model Suggestion** → AI Gateway (Jordano)
-3. **Run Analysis** → R Service (OLS or Logistic based on suggestion)
-4. **Interpret Results** → AI Gateway (Jordano)
-
-**Example workflow:**
-```
-User uploads CSV
-  ↓
-Integration API calls AI Gateway: "What variable types?"
-  ↓
-Integration API calls AI Gateway: "OLS or Logistic?"
-  ↓
-Integration API calls R Service: POST /ols or /logistic
-  ↓
-Integration API calls AI Gateway: "Explain results"
-  ↓
-Results sent to Frontend
-```
+1. ✅ Check the Troubleshooting section above
+2. ✅ Review Docker logs: `docker-compose logs`
+3. ✅ Ensure Docker Desktop is running
+4. ✅ Try restarting: `docker-compose down && docker-compose up --build`
 
 ---
 
-## 📊 Performance Benchmarks
+## 📄 License
 
-**Tested on:** 2.5 GHz Quad-Core, 16GB RAM
-
-| Dataset Size | OLS Time | Logistic Time |
-|--------------|----------|---------------|
-| 100 rows | 0.2s | 0.3s |
-| 1,000 rows | 0.8s | 1.2s |
-| 10,000 rows | 3.2s | 4.5s |
-| 100,000 rows | 28s | 42s |
-
-**Target:** < 5 seconds for 1,000 rows ( Met)
+This project was created for CSC 230 - Software Engineering.
+For educational purposes only.
 
 ---
 
-## Definition of Done
+<div align="center">
 
-- [x] plumber_ols.R returns broom-formatted JSON
-- [x] plumber_logistic.R returns broom-formatted JSON
-- [x] Both handle CSV and XLSX files
-- [x] Error messages are descriptive
-- [x] All 3 services respond to /ping
-- [x] Docker images build successfully
-- [x] docker-compose orchestrates all services
-- [x] Test suites pass (8/8 for OLS, 1/1 for Logistic)
-- [x] Documentation complete
+**Happy Analyzing! 📈**
 
----
+Made with ❤️ by the StatsMate Team
 
-## Support
-
-**Team Lead:** Jordano  
-**Role:** R/Stats + AI Gateway Lead  
-**Project:** StatsMate (CSC 230)
-
-**For issues:**
-1. Check this README first
-2. Review test files for examples
-3. Check Swagger UI: http://localhost:8000/__docs__/
-4. Contact team lead
-
----
-
-##  Security Notes
-
-- All data volumes are mounted read-only (`:ro`)
-- Services run in isolated Docker network
-- No sensitive data stored in images
-- CORS enabled for development (restrict in production)
-
----
-
-**Last Updated:** November 16, 2025  
-**Version:** 1.0.0  
-**Status:** Production Ready 
+</div>
