@@ -30,6 +30,7 @@ StatsMate is a full-stack web application that enables political science student
 | Software | Version | Download |
 |----------|---------|----------|
 | **Docker Desktop** | 4.0+ | [docker.com/products/docker-desktop](https://www.docker.com/products/docker-desktop) |
+| **Git** | Any | [git-scm.com/downloads](https://git-scm.com/downloads) |
 
 ### System Requirements
 
@@ -39,8 +40,6 @@ StatsMate is a full-stack web application that enables political science student
 - **Internet**: Required for first build (downloads Docker images)
 
 ### Ports Used
-
-The application uses these ports (must be available):
 
 | Port | Service |
 |------|---------|
@@ -66,37 +65,38 @@ The application uses these ports (must be available):
    - Windows: Look for the whale icon in system tray (should be steady, not animating)
    - Mac: Look for the whale icon in menu bar
 
-### Step 2: Get the Project Files
+### Step 2: Clone the Repository
 
-**Option A: From Flash Drive**
-```
-Copy the entire "CSC 230 Final Code" folder to your computer
-Example: C:\Projects\CSC 230 Final Code
-```
-
-**Option B: From GitHub**
 ```bash
 git clone https://github.com/Dpatel0805693/Jakadd.git
 cd Jakadd
 ```
 
-### Step 3: Start the Application
+### Step 3: Create Environment File
 
-**Windows (PowerShell):**
-```powershell
-cd "C:\path\to\CSC 230 Final Code"
-docker-compose up --build
+Create a `.env` file in the project root:
+
+```env
+# MongoDB
+MONGO_URI=mongodb://mongodb:27017/csc230
+
+# JWT Secret
+JWT_SECRET=your-super-secret-jwt-key-change-in-production
+
+# OpenAI API Key (optional - enables AI interpretations)
+OPENAI_API_KEY=sk-your-openai-api-key-here
+
+# Optional
+NODE_ENV=production
 ```
 
-**Mac/Linux (Terminal):**
+**Note**: Get your OpenAI API key from [platform.openai.com/api-keys](https://platform.openai.com/api-keys)
+
+### Step 4: Start the Application
+
 ```bash
-cd /path/to/CSC\ 230\ Final\ Code
 docker-compose up --build
 ```
-
-**Or double-click `START_STATSMATE.bat`** (Windows only)
-
-### Step 4: Wait for Build
 
 First run takes **5-15 minutes** as Docker downloads and builds everything.
 
@@ -128,8 +128,6 @@ csc230-frontend  | ➜ Local: http://localhost:5173/
 3. Wait for the upload confirmation
 4. Your file appears in the dashboard
 
-**Sample data files are included in the `examples/` folder!**
-
 ### 3️⃣ Configure Your Analysis
 
 1. Click on your uploaded file
@@ -137,7 +135,6 @@ csc230-frontend  | ➜ Local: http://localhost:5173/
    - For OLS: Choose a continuous variable (e.g., grades, income)
    - For Logistic: Choose a binary variable (e.g., pass/fail, yes/no)
 3. **Select Independent Variables** (predictors)
-   - Check one or more variables
 4. **Choose Model Type**:
    - **Linear Regression (OLS)** - for continuous outcomes
    - **Logistic Regression** - for binary (0/1) outcomes
@@ -157,28 +154,21 @@ csc230-frontend  | ➜ Local: http://localhost:5173/
 
 ### 5️⃣ Download Results
 
-Click **"Download Results"** to save your analysis as a file.
+Click **"Download Results"** to save your analysis.
 
 ---
 
-## 📁 Sample Data Files
+## 📁 Sample Data
 
-Test the application with these included datasets in the `examples/` folder:
-
-| File | Use For | Variables |
-|------|---------|-----------|
-| `student_data.csv` | OLS regression | student_id, study_hours, prior_gpa, attendance_rate, final_grade |
-| `voting_data.csv` | Logistic regression | Binary outcome analysis |
+Test datasets are available in the `examples/` folder.
 
 ### Example: OLS Analysis
-- **File**: Any CSV with continuous outcome
-- **Dependent**: `final_grade` (or any numeric column)
+- **Dependent**: Any continuous variable (e.g., `final_grade`)
 - **Independent**: `study_hours`, `prior_gpa`, `attendance_rate`
 - **Model**: Linear Regression (OLS)
 
 ### Example: Logistic Analysis
-- **File**: Any CSV with binary (0/1) outcome
-- **Dependent**: `passed` or `voted` (binary column)
+- **Dependent**: Any binary variable (e.g., `passed`, `voted`)
 - **Independent**: `study_hours`, `prior_gpa`
 - **Model**: Logistic Regression
 
@@ -186,46 +176,14 @@ Test the application with these included datasets in the `examples/` folder:
 
 ## 🛠️ Common Commands
 
-### Start Application
-```bash
-docker-compose up --build
-```
-
-### Start in Background
-```bash
-docker-compose up -d --build
-```
-
-### Stop Application
-```bash
-docker-compose down
-```
-
-### View All Logs
-```bash
-docker-compose logs
-```
-
-### View Specific Service Logs
-```bash
-docker-compose logs frontend
-docker-compose logs core-api
-docker-compose logs integration-api
-docker-compose logs r-ols
-docker-compose logs r-logistic
-docker-compose logs mongodb
-```
-
-### Check Running Containers
-```bash
-docker ps
-```
-
-### Restart Everything
-```bash
-docker-compose down
-docker-compose up --build
-```
+| Command | Description |
+|---------|-------------|
+| `docker-compose up --build` | Start application |
+| `docker-compose up -d --build` | Start in background |
+| `docker-compose down` | Stop application |
+| `docker-compose logs` | View all logs |
+| `docker-compose logs <service>` | View specific service logs |
+| `docker ps` | Check running containers |
 
 ---
 
@@ -234,78 +192,48 @@ docker-compose up --build
 ### Docker Desktop Not Starting
 
 **Windows:**
-1. Ensure virtualization is enabled in BIOS
-2. Install/update WSL2:
-   ```powershell
-   wsl --install
-   wsl --update
-   ```
-3. Restart computer
+```powershell
+wsl --install
+wsl --update
+```
+Then restart your computer.
 
-**Mac:**
-- Ensure you have macOS 10.15 or later
-- Try reinstalling Docker Desktop
-
-### "Port Already in Use" Error
-
-Find and stop the conflicting process:
+### "Port Already in Use"
 
 **Windows:**
 ```powershell
 netstat -ano | findstr :5173
-taskkill /PID  /F
+taskkill /PID <PID_NUMBER> /F
 ```
 
 **Mac/Linux:**
 ```bash
 lsof -i :5173
-kill -9 
+kill -9 <PID_NUMBER>
 ```
 
 ### "Cannot Connect to Docker Daemon"
 
-Docker Desktop isn't running. Start it and wait for the whale icon to be steady.
+Start Docker Desktop and wait for the whale icon to be steady.
 
 ### Build Fails - "No Space Left"
 
-Clean up Docker:
 ```bash
 docker system prune -a
 ```
 
-### Analysis Fails - "File Not Found"
+### Analysis Fails
 
-1. Re-upload your CSV file
-2. Restart the application:
-   ```bash
-   docker-compose down
-   docker-compose up --build
-   ```
-
-### MongoDB Connection Errors
-
-Wait 30 seconds after starting - MongoDB takes time to initialize.
-
-Check if it's healthy:
-```bash
-docker-compose logs mongodb
-```
-
-### R Service Returns 404
-
-Rebuild the R containers:
 ```bash
 docker-compose down
-docker-compose up --build r-ols r-logistic
+docker-compose up --build
 ```
 
 ### Logistic Regression "Failed to Converge"
 
-This is a statistical issue, not a bug. It happens when:
-- Your predictors perfectly separate the outcome
-- You need more data
-
-**Solution**: Add more predictor variables or use a larger dataset.
+This is a statistical issue (complete separation). Try:
+- Adding more predictor variables
+- Using a larger dataset
 
 ---
 
@@ -336,7 +264,7 @@ This is a statistical issue, not a bug. It happens when:
 └─────────────────────────────────────────────────────────────┘
 ```
 
-### Services Overview
+### Services
 
 | Service | Technology | Purpose |
 |---------|------------|---------|
@@ -345,7 +273,7 @@ This is a statistical issue, not a bug. It happens when:
 | **Integration API** | Node.js, Express | Analysis orchestration |
 | **R-OLS** | R, Plumber | OLS regression analysis |
 | **R-Logistic** | R, Plumber | Logistic regression analysis |
-| **AI Gateway** | Node.js | AI-powered interpretations |
+| **AI Gateway** | Node.js, OpenAI | AI-powered interpretations |
 | **MongoDB** | MongoDB 7 | Data persistence |
 
 ---
@@ -353,93 +281,28 @@ This is a statistical issue, not a bug. It happens when:
 ## 📂 Project Structure
 
 ```
-CSC 230 Final Code/
 ├── backend/                    # Core API
 │   ├── routes/                 # API endpoints
 │   ├── models/                 # MongoDB schemas
 │   ├── middleware/             # Auth, upload handling
-│   ├── uploads/                # Uploaded CSV files
 │   └── Dockerfile
 ├── frontend/                   # React application
 │   ├── src/
-│   │   ├── components/         # Reusable UI components
-│   │   │   └── charts/         # Visualization components
+│   │   ├── components/         # UI components
 │   │   ├── pages/              # Page components
-│   │   ├── context/            # Auth context
 │   │   └── services/           # API client
 │   └── Dockerfile
 ├── integration-api/            # Analysis orchestration
-│   ├── routes/
-│   │   └── analyzeRoute.js     # Main analysis endpoint
 │   └── Dockerfile
-├── ai-gateway/                 # AI interpretation service
+├── ai-gateway/                 # AI service
 │   └── Dockerfile
 ├── r-services/                 # R statistical services
-│   ├── plumber_ols.R           # OLS regression
-│   ├── plumber_logistic.R      # Logistic regression
-│   ├── Dockerfile.ols
-│   └── Dockerfile.logistic
+│   ├── plumber_ols.R
+│   ├── plumber_logistic.R
+│   └── Dockerfile.*
 ├── examples/                   # Sample datasets
 ├── docker-compose.yml          # Container orchestration
-└── README.md                   # This file
-```
-
----
-
-## 🔐 Environment Variables
-
-Create a `.env` file in the project root (optional):
-
-```env
-# JWT Secret for authentication
-JWT_SECRET=your-super-secret-jwt-key-change-in-production
-
-# OpenAI API Key (optional - enables AI interpretations)
-OPENAI_API_KEY=sk-your-openai-api-key-here
-```
-
-**Note**: The application works without these - defaults are used.
-
----
-
-## 📊 R Services API Reference
-
-### OLS Service (Port 8000)
-
-**Health Check:**
-```
-GET http://localhost:8000/ping
-```
-
-**Run Analysis:**
-```
-POST http://localhost:8000/ols
-Content-Type: application/json
-
-{
-  "data": [...],           // Inline data array
-  "dependent_var": "y",
-  "independent_vars": ["x1", "x2"]
-}
-```
-
-### Logistic Service (Port 8002)
-
-**Health Check:**
-```
-GET http://localhost:8002/ping
-```
-
-**Run Analysis:**
-```
-POST http://localhost:8002/logistic
-Content-Type: application/json
-
-{
-  "data": [...],           // Inline data array
-  "dependent_var": "outcome",
-  "independent_vars": ["predictor1", "predictor2"]
-}
+└── README.md
 ```
 
 ---
@@ -461,70 +324,40 @@ Content-Type: application/json
 
 ### Verification Steps
 
-1. Start the application:
+1. Clone and start:
    ```bash
+   git clone https://github.com/Dpatel0805693/Jakadd.git
+   cd Jakadd
    docker-compose up --build
    ```
 
-2. Verify all 8 containers are running:
+2. Verify 8 containers running:
    ```bash
    docker ps
    ```
-   Expected: 8 containers (mongodb, core-api, integration-api, ai-gateway, r-ols, r-logistic, r-reserved, frontend)
 
 3. Open [http://localhost:5173](http://localhost:5173)
 
-4. Create a test account
+4. Create account → Upload CSV → Run analysis
 
-5. Upload a CSV file from `examples/` folder
-
-6. Configure analysis:
-   - Dependent: Choose a numeric column
-   - Independent: Select 1-3 predictor columns
-   - Model: OLS or Logistic
-
-7. Verify all 4 result tabs display correctly:
-   - ✅ AI Interpretation shows plain-language summary
-   - ✅ Statistical Output shows coefficients table
-   - ✅ Visualizations shows charts
-   - ✅ R Code shows reproducible script
+5. Verify all 4 result tabs display correctly
 
 ### Key Technical Achievements
 
-- ✅ Microservices architecture with 8 Docker containers
+- ✅ Microservices architecture (8 Docker containers)
 - ✅ Real-time statistical analysis via R/Plumber
 - ✅ JWT authentication
 - ✅ File upload with validation
-- ✅ Interactive data visualizations (Recharts)
+- ✅ Interactive visualizations (Recharts)
 - ✅ AI-powered result interpretation
 - ✅ Reproducible R code generation
 - ✅ Educational tooltip system
 
 ---
 
-## 📝 Version History
-
-| Version | Date | Changes |
-|---------|------|---------|
-| 1.0.0 | Dec 2025 | Initial release - OLS & Logistic regression |
-
----
-
-## 🆘 Support
-
-If you encounter issues:
-
-1. ✅ Check the Troubleshooting section above
-2. ✅ Review Docker logs: `docker-compose logs`
-3. ✅ Ensure Docker Desktop is running
-4. ✅ Try restarting: `docker-compose down && docker-compose up --build`
-
----
-
 ## 📄 License
 
-This project was created for CSC 230 - Software Engineering.
-For educational purposes only.
+CSC 230 - Software Engineering | Educational purposes only.
 
 ---
 
