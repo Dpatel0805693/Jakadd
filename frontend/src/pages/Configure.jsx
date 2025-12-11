@@ -1,530 +1,552 @@
-// pages/Configure.jsx - Analysis configuration with split-screen layout
-import { useState, useEffect } from 'react';
-import { useParams } from 'react-router-dom';
-import { motion, AnimatePresence } from 'framer-motion';
-import { Play, ChevronRight, ChevronLeft, Code2, FileText, Sparkles } from 'lucide-react';
-import apiService from '../services/api';
-import Prism from 'prismjs';
-import 'prismjs/themes/prism-tomorrow.css';
-import 'prismjs/components/prism-r';
+// src/pages/Configure.jsx
+// Variable selection and analysis configuration page
 
-export default function Configure() {
-  const { fileId } = useParams();
-  const [drawerOpen, setDrawerOpen] = useState(true);
-  const [activeTab, setActiveTab] = useState('code'); // code, output, explain
-  const [loading, setLoading] = useState(false);
+import React, { useState, useEffect } from 'react';
+import { useNavigate, useLocation, useParams } from 'react-router-dom';
+import apiService from '../services/api';
+import Papa from 'papaparse';
+
+const Configure = () => {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const { fileId: paramFileId } = useParams();
   
-  // Data state
-  const [fileData, setFileData] = useState(null);
-  const [columns, setColumns] = useState([]);
-  const [selectedAnalysis, setSelectedAnalysis] = useState('ols');
+  // Get fileId from either route params or location state
+  const fileId = paramFileId || location.state?.fileId;
+  
+  const [file, setFile] = useState(null);
+  const [data, setData] = useState([]);
+  const [headers, setHeaders] = useState([]);
+  const [variableTypes, setVariableTypes] = useState({});
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  
+  // Form state
   const [dependentVar, setDependentVar] = useState('');
   const [independentVars, setIndependentVars] = useState([]);
-  
-  // Results state
-  const [rCode, setRCode] = useState('');
-  const [output, setOutput] = useState(null);
-  const [aiExplanation, setAiExplanation] = useState('');
-  const [aiSuggestion, setAiSuggestion] = useState(null);
+  const [modelType, setModelType] = useState('auto');
 
-  // Load file data
   useEffect(() => {
+    if (!fileId) {
+      setError('No file selected');
+      setLoading(false);
+      return;
+    }
     loadFileData();
   }, [fileId]);
 
   const loadFileData = async () => {
-    // Use mock data for demo
-    if (fileId === 'demo') {
-      const mockData = {
-        id: 'demo',
-        filename: 'mtcars_sample.csv',
-        columns: ['mpg', 'hp', 'wt', 'cyl', 'vs'],
-        sample: [
-          { mpg: 21.0, hp: 110, wt: 2.62, cyl: 6, vs: 0 },
-          { mpg: 21.0, hp: 110, wt: 2.875, cyl: 6, vs: 0 },
-          { mpg: 22.8, hp: 93, wt: 2.32, cyl: 4, vs: 1 },
-          { mpg: 21.4, hp: 110, wt: 3.215, cyl: 6, vs: 1 },
-          { mpg: 18.7, hp: 175, wt: 3.44, cyl: 8, vs: 0 },
-        ],
-        data: [
-          { mpg: 21.0, hp: 110, wt: 2.62, cyl: 6, vs: 0 },
-          { mpg: 21.0, hp: 110, wt: 2.875, cyl: 6, vs: 0 },
-          { mpg: 22.8, hp: 93, wt: 2.32, cyl: 4, vs: 1 },
-          { mpg: 21.4, hp: 110, wt: 3.215, cyl: 6, vs: 1 },
-          { mpg: 18.7, hp: 175, wt: 3.44, cyl: 8, vs: 0 },
-          { mpg: 18.1, hp: 105, wt: 3.46, cyl: 6, vs: 1 },
-          { mpg: 14.3, hp: 245, wt: 3.57, cyl: 8, vs: 0 },
-          { mpg: 24.4, hp: 62, wt: 3.19, cyl: 4, vs: 1 },
-          { mpg: 22.8, hp: 95, wt: 3.15, cyl: 4, vs: 1 },
-          { mpg: 19.2, hp: 123, wt: 3.44, cyl: 6, vs: 1 },
-        ]
-      };
-      
-      setFileData(mockData);
-      setColumns(mockData.columns);
-      
-      // Auto-set dependent variable
-      setDependentVar('mpg');
-      setIndependentVars(['hp', 'wt']);
-      
-      return;
-    }
-    
-    // Real API call for non-demo files
     try {
-      const response = await apiService.getFile(fileId);
-      setFileData(response.data);
-      setColumns(response.data.columns || []);
+      setLoading(true);
       
-      // Auto-detect variable types with AI
-      detectVariableTypes(response.data.columns, response.data.sample);
-    } catch (error) {
-      console.error('Error loading file:', error);
-    }
-  };
-
-  const detectVariableTypes = async (cols, sample) => {
-    try {
-      const response = await apiService.detectTypes({
-        columns: cols,
-        sample: sample.slice(0, 5) // First 5 rows
+      // Get file metadata
+      const fileData = await apiService.getFile(fileId);
+      setFile(fileData.file);
+      
+      // Download and parse the file
+      const blob = await apiService.downloadFile(fileId);
+      const text = await blob.text();
+      
+      // Parse CSV
+      Papa.parse(text, {
+        complete: (results) => {
+          const parsedData = results.data.filter(row => 
+            row.some(cell => cell !== null && cell !== '')
+          );
+          
+          if (parsedData.length > 0) {
+            const headers = parsedData[0];
+            const dataRows = parsedData.slice(1, 11); // First 10 rows for preview
+            
+            setHeaders(headers);
+            setData(dataRows);
+            
+            // Detect variable types
+            const types = detectVariableTypes(headers, parsedData.slice(1));
+            setVariableTypes(types);
+          }
+          
+          setLoading(false);
+        },
+        error: (error) => {
+          setError('Failed to parse file: ' + error.message);
+          setLoading(false);
+        }
       });
       
-      // Auto-select dependent variable
-      const dependent = response.data.variables.find(v => v.suggested_role === 'dependent');
-      if (dependent) {
-        setDependentVar(dependent.name);
-      }
-      
-      // Auto-select independent variables
-      const independent = response.data.variables
-        .filter(v => v.suggested_role === 'independent')
-        .map(v => v.name);
-      setIndependentVars(independent);
-      
-    } catch (error) {
-      console.error('Error detecting types:', error);
-    }
-  };
-
-  const getModelSuggestion = async () => {
-    if (!dependentVar || independentVars.length === 0) return;
-    
-    try {
-      const response = await apiService.suggestModel({
-        dependentVar: { name: dependentVar, type: 'continuous' }, // TODO: get actual type
-        independentVars: independentVars.map(name => ({ name, type: 'continuous' }))
-      });
-      
-      setAiSuggestion(response.data);
-      setSelectedAnalysis(response.data.model);
-    } catch (error) {
-      console.error('Error getting suggestion:', error);
-    }
-  };
-
-  const runAnalysis = async () => {
-    if (!dependentVar || independentVars.length === 0) {
-      alert('Please select variables');
-      return;
-    }
-
-    setLoading(true);
-    
-    try {
-      // Build formula
-      const formula = `${dependentVar} ~ ${independentVars.join(' + ')}`;
-      
-      // Generate R code
-      const code = generateRCode(selectedAnalysis, formula);
-      setRCode(code);
-      
-      // Run regression
-      const analysisFunc = selectedAnalysis === 'ols' ? apiService.runOLS : apiService.runLogistic;
-      const response = await analysisFunc({
-        formula: formula,
-        data: fileData.data // Actual data
-      });
-      
-      setOutput(response.data);
-      setActiveTab('output');
-      
-      // Get AI interpretation
-      interpretResults(response.data, formula);
-      
-    } catch (error) {
-      console.error('Error running analysis:', error);
-      alert('Error: ' + (error.response?.data?.error || error.message));
-    } finally {
+    } catch (err) {
+      setError(err.message || 'Failed to load file');
       setLoading(false);
     }
   };
 
-  const interpretResults = async (results, formula) => {
-    try {
-      const response = await apiService.interpretResults({
-        model_type: selectedAnalysis,
-        formula: formula,
-        results: results
-      });
-      
-      setAiExplanation(response.data.summary);
-    } catch (error) {
-      console.error('Error interpreting results:', error);
-    }
-  };
-
-  const generateRCode = (analysis, formula) => {
-    const templates = {
-      ols: `# Ordinary Least Squares Regression
-library(broom)
-
-# Fit model
-model <- lm(
-  ${formula},
-  data = your_data
-)
-
-# Get results
-tidy_results <- tidy(model)
-glance_results <- glance(model)
-
-# Summary
-summary(model)`,
-      
-      logistic: `# Logistic Regression
-library(broom)
-
-# Fit model
-model <- glm(
-  ${formula},
-  data = your_data,
-  family = binomial()
-)
-
-# Get results
-tidy_results <- tidy(model)
-glance_results <- glance(model)
-
-# Summary
-summary(model)`
-    };
+  const detectVariableTypes = (headers, dataRows) => {
+    const types = {};
     
-    return templates[analysis] || '';
+    headers.forEach((header, index) => {
+      // Sample first 100 rows
+      const sample = dataRows.slice(0, 100).map(row => row[index]);
+      
+      // Count numeric values
+      const numericCount = sample.filter(val => 
+        val !== '' && val !== null && !isNaN(val)
+      ).length;
+      
+      // If more than 80% are numeric, consider it numeric
+      const isNumeric = numericCount / sample.length > 0.8;
+      
+      types[header] = isNumeric ? 'numeric' : 'categorical';
+    });
+    
+    return types;
   };
 
-  const toggleVar = (varName) => {
-    if (independentVars.includes(varName)) {
-      setIndependentVars(independentVars.filter(v => v !== varName));
-    } else {
-      setIndependentVars([...independentVars, varName]);
+  const handleDependentVarChange = (e) => {
+    setDependentVar(e.target.value);
+  };
+
+  const handleIndependentVarToggle = (variable) => {
+    setIndependentVars(prev => {
+      if (prev.includes(variable)) {
+        return prev.filter(v => v !== variable);
+      } else {
+        return [...prev, variable];
+      }
+    });
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    
+    // Validation
+    if (!dependentVar) {
+      alert('Please select a dependent variable');
+      return;
+    }
+    
+    if (independentVars.length === 0) {
+      alert('Please select at least one independent variable');
+      return;
+    }
+    
+    if (independentVars.includes(dependentVar)) {
+      alert('Dependent variable cannot also be an independent variable');
+      return;
+    }
+    
+    try {
+      setSubmitting(true);
+      
+      // Submit analysis request
+      const result = await apiService.createAnalysis(
+        fileId,
+        dependentVar,
+        independentVars,
+        modelType
+      );
+      
+      // Navigate to results page
+      if (result.jobId || result.analysisId) {
+        navigate(`/results/${result.jobId || result.analysisId}`);
+      }else {
+        alert('Analysis started but no ID returned');
+      }
+      
+    } catch (err) {
+      alert(err.message || 'Failed to start analysis');
+      setSubmitting(false);
     }
   };
 
-  // Syntax highlight R code
-  useEffect(() => {
-    if (rCode) {
-      Prism.highlightAll();
-    }
-  }, [rCode]);
+  if (loading) {
+    return (
+      <div style={styles.loadingContainer}>
+        <div style={styles.spinner} />
+        <p>Loading file data...</p>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div style={styles.errorContainer}>
+        <h2>⚠️ Error</h2>
+        <p>{error}</p>
+        <button style={styles.backButton} onClick={() => navigate('/dashboard')}>
+          ← Back to Dashboard
+        </button>
+      </div>
+    );
+  }
 
   return (
-    <div className="flex h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900">
-      {/* Left Drawer Menu */}
-      <AnimatePresence>
-        {drawerOpen && (
-          <motion.div
-            initial={{ x: -300 }}
-            animate={{ x: 0 }}
-            exit={{ x: -300 }}
-            transition={{ type: 'spring', damping: 25 }}
-            className="w-80 bg-slate-800/50 backdrop-blur-lg border-r border-slate-700/50 p-6 overflow-y-auto"
-          >
-            <h2 className="text-2xl font-bold mb-6 bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent">
-              Analysis Setup
-            </h2>
+    <div style={styles.container}>
+      {/* Header */}
+      <div style={styles.header}>
+        <button style={styles.backButton} onClick={() => navigate('/dashboard')}>
+          ← Back
+        </button>
+        <h2 style={styles.title}>Configure Analysis: {file?.originalName}</h2>
+      </div>
 
-            {/* Analysis Type Selector */}
-            <div className="mb-6">
-              <label className="block text-sm font-semibold mb-2 text-gray-300">
-                Analysis Type
-              </label>
-              <select
-                value={selectedAnalysis}
-                onChange={(e) => setSelectedAnalysis(e.target.value)}
-                className="input w-full"
-              >
-                <option value="ols">Linear Regression (OLS)</option>
-                <option value="logistic">Logistic Regression</option>
-              </select>
-            </div>
-
-            {/* AI Suggestion */}
-            {aiSuggestion && (
-              <motion.div
-                initial={{ opacity: 0, y: -10 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="mb-6 p-4 bg-purple-500/10 border border-purple-500/30 rounded-lg"
-              >
-                <div className="flex items-start gap-2">
-                  <Sparkles className="w-5 h-5 text-purple-400 flex-shrink-0 mt-0.5" />
-                  <div>
-                    <p className="text-sm font-semibold text-purple-300 mb-1">AI Suggestion</p>
-                    <p className="text-xs text-gray-300">{aiSuggestion.explanation}</p>
-                  </div>
-                </div>
-              </motion.div>
-            )}
-
+      {/* Main Content - Split Screen */}
+      <div style={styles.mainContent}>
+        {/* Left Panel - Configuration */}
+        <div style={styles.leftPanel}>
+          <div style={styles.configSection}>
+            <h3 style={styles.sectionTitle}>🎯 Select Variables</h3>
+            
             {/* Dependent Variable */}
-            <div className="mb-6">
-              <label className="block text-sm font-semibold mb-2 text-gray-300">
-                Dependent Variable (Y)
+            <div style={styles.formGroup}>
+              <label style={styles.label}>
+                Dependent Variable (Outcome)
+                <span style={styles.tooltip} title="The variable you want to predict or explain">ℹ️</span>
               </label>
-              <select
+              <select 
+                style={styles.select}
                 value={dependentVar}
-                onChange={(e) => setDependentVar(e.target.value)}
-                className="input w-full"
+                onChange={handleDependentVarChange}
               >
-                <option value="">Select variable...</option>
-                {columns.map((col) => (
-                  <option key={col} value={col}>{col}</option>
+                <option value="">-- Select Dependent Variable --</option>
+                {headers.map(header => (
+                  <option key={header} value={header}>
+                    {header} ({variableTypes[header]})
+                  </option>
                 ))}
               </select>
             </div>
 
             {/* Independent Variables */}
-            <div className="mb-6">
-              <label className="block text-sm font-semibold mb-2 text-gray-300">
-                Independent Variables (X)
+            <div style={styles.formGroup}>
+              <label style={styles.label}>
+                Independent Variables (Predictors)
+                <span style={styles.tooltip} title="Variables used to predict the dependent variable">ℹ️</span>
               </label>
-              <div className="space-y-2">
-                {columns.filter(col => col !== dependentVar).map((col) => (
-                  <label
-                    key={col}
-                    className="flex items-center gap-3 p-3 bg-slate-700/30 rounded-lg cursor-pointer hover:bg-slate-700/50 transition-colors"
+              <div style={styles.checkboxContainer}>
+                {headers.map(header => (
+                  <label 
+                    key={header} 
+                    style={{
+                      ...styles.checkboxLabel,
+                      ...(header === dependentVar ? styles.disabledCheckbox : {})
+                    }}
                   >
                     <input
                       type="checkbox"
-                      checked={independentVars.includes(col)}
-                      onChange={() => toggleVar(col)}
-                      className="w-4 h-4 rounded border-gray-600 text-blue-500 focus:ring-blue-500"
+                      checked={independentVars.includes(header)}
+                      onChange={() => handleIndependentVarToggle(header)}
+                      disabled={header === dependentVar}
+                      style={styles.checkbox}
                     />
-                    <span className="text-sm text-gray-200">{col}</span>
+                    <span style={styles.checkboxText}>
+                      {header}
+                      <span style={styles.varType}>({variableTypes[header]})</span>
+                    </span>
                   </label>
                 ))}
               </div>
+              <div style={styles.selectedCount}>
+                Selected: {independentVars.length} variable{independentVars.length !== 1 ? 's' : ''}
+              </div>
             </div>
 
-            {/* Action Buttons */}
-            <div className="space-y-3">
-              <button
-                onClick={getModelSuggestion}
-                className="btn-secondary w-full flex items-center justify-center gap-2"
-                disabled={!dependentVar || independentVars.length === 0}
+            {/* Model Type */}
+            <div style={styles.formGroup}>
+              <label style={styles.label}>
+                Model Type
+                <span style={styles.tooltip} title="Statistical model to use for analysis">ℹ️</span>
+              </label>
+              <select 
+                style={styles.select}
+                value={modelType}
+                onChange={(e) => setModelType(e.target.value)}
               >
-                <Sparkles className="w-4 h-4" />
-                Get AI Suggestion
-              </button>
-              
-              <button
-                onClick={runAnalysis}
-                disabled={loading || !dependentVar || independentVars.length === 0}
-                className="btn-primary w-full flex items-center justify-center gap-2"
-              >
-                {loading ? (
-                  <>
-                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                    Running...
-                  </>
-                ) : (
-                  <>
-                    <Play className="w-4 h-4" />
-                    Run Analysis
-                  </>
-                )}
-              </button>
+                <option value="auto">Auto-detect (Recommended)</option>
+                <option value="ols">OLS Regression (Continuous outcome)</option>
+                <option value="logistic">Logistic Regression (Binary outcome)</option>
+              </select>
+              <div style={styles.hint}>
+                Auto-detect will choose the best model based on your dependent variable
+              </div>
             </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
 
-      {/* Toggle Drawer Button */}
-      <button
-        onClick={() => setDrawerOpen(!drawerOpen)}
-        className="absolute left-0 top-1/2 -translate-y-1/2 bg-slate-700 p-2 rounded-r-lg hover:bg-slate-600 transition-colors z-10"
-        style={{ left: drawerOpen ? '320px' : '0' }}
-      >
-        {drawerOpen ? <ChevronLeft className="w-5 h-5" /> : <ChevronRight className="w-5 h-5" />}
-      </button>
-
-      {/* Right Panel - Code/Output/Explanation */}
-      <div className="flex-1 flex flex-col">
-        {/* Tabs */}
-        <div className="flex gap-2 p-4 bg-slate-800/30 backdrop-blur-sm border-b border-slate-700/50">
-          <TabButton
-            active={activeTab === 'code'}
-            onClick={() => setActiveTab('code')}
-            icon={<Code2 className="w-4 h-4" />}
-          >
-            R Code
-          </TabButton>
-          <TabButton
-            active={activeTab === 'output'}
-            onClick={() => setActiveTab('output')}
-            icon={<FileText className="w-4 h-4" />}
-          >
-            Output
-          </TabButton>
-          <TabButton
-            active={activeTab === 'explain'}
-            onClick={() => setActiveTab('explain')}
-            icon={<Sparkles className="w-4 h-4" />}
-          >
-            AI Explanation
-          </TabButton>
+            {/* Submit Button */}
+            <button 
+              style={{
+                ...styles.submitButton,
+                ...(submitting ? styles.submitButtonDisabled : {})
+              }}
+              onClick={handleSubmit}
+              disabled={submitting}
+            >
+              {submitting ? '⏳ Running Analysis...' : '🚀 Run Analysis'}
+            </button>
+          </div>
         </div>
 
-        {/* Tab Content */}
-        <div className="flex-1 overflow-auto p-6">
-          <AnimatePresence mode="wait">
-            {activeTab === 'code' && (
-              <motion.div
-                key="code"
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -20 }}
-              >
-                {rCode ? (
-                  <div className="code-block">
-                    <pre>
-                      <code className="language-r">{rCode}</code>
-                    </pre>
-                  </div>
-                ) : (
-                  <div className="text-center text-gray-400 py-12">
-                    <Code2 className="w-16 h-16 mx-auto mb-4 opacity-50" />
-                    <p>R code will appear here after running analysis</p>
-                  </div>
-                )}
-              </motion.div>
-            )}
-
-            {activeTab === 'output' && (
-              <motion.div
-                key="output"
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -20 }}
-              >
-                {output ? (
-                  <div className="space-y-6">
-                    {/* Model Statistics */}
-                    {output.glance && (
-                      <div className="card">
-                        <h3 className="text-lg font-semibold mb-4">Model Statistics</h3>
-                        <div className="grid grid-cols-2 gap-4">
-                          {Object.entries(output.glance).map(([key, value]) => (
-                            <div key={key}>
-                              <p className="text-sm text-gray-400">{key}</p>
-                              <p className="text-lg font-semibold">
-                                {typeof value === 'number' ? value.toFixed(4) : value}
-                              </p>
-                            </div>
-                          ))}
-                        </div>
+        {/* Right Panel - Data Preview */}
+        <div style={styles.rightPanel}>
+          <h3 style={styles.sectionTitle}>📊 Data Preview</h3>
+          <div style={styles.tableWrapper}>
+            <table style={styles.table}>
+              <thead>
+                <tr>
+                  {headers.map(header => (
+                    <th key={header} style={styles.th}>
+                      <div style={styles.headerCell}>
+                        <span>{header}</span>
+                        <span style={styles.typeBadge}>
+                          {variableTypes[header] === 'numeric' ? '🔢' : '📝'}
+                        </span>
                       </div>
-                    )}
-
-                    {/* Coefficients Table */}
-                    {output.tidy && (
-                      <div className="card">
-                        <h3 className="text-lg font-semibold mb-4">Coefficients</h3>
-                        <div className="overflow-x-auto">
-                          <table className="w-full text-sm">
-                            <thead className="border-b border-slate-600">
-                              <tr>
-                                <th className="text-left py-2">Term</th>
-                                <th className="text-right py-2">Estimate</th>
-                                <th className="text-right py-2">Std. Error</th>
-                                <th className="text-right py-2">Statistic</th>
-                                <th className="text-right py-2">P-Value</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {output.tidy.map((row, i) => (
-                                <tr key={i} className="border-b border-slate-700/50">
-                                  <td className="py-2">{row.term}</td>
-                                  <td className="text-right">{row.estimate.toFixed(4)}</td>
-                                  <td className="text-right">{row['std.error']?.toFixed(4)}</td>
-                                  <td className="text-right">{row.statistic?.toFixed(4)}</td>
-                                  <td className="text-right">
-                                    <span className={row['p.value'] < 0.05 ? 'text-green-400 font-semibold' : ''}>
-                                      {row['p.value']?.toFixed(4)}
-                                    </span>
-                                  </td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                ) : (
-                  <div className="text-center text-gray-400 py-12">
-                    <FileText className="w-16 h-16 mx-auto mb-4 opacity-50" />
-                    <p>Results will appear here after running analysis</p>
-                  </div>
-                )}
-              </motion.div>
-            )}
-
-            {activeTab === 'explain' && (
-              <motion.div
-                key="explain"
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -20 }}
-              >
-                {aiExplanation ? (
-                  <div className="card">
-                    <div className="flex items-start gap-3 mb-4">
-                      <Sparkles className="w-6 h-6 text-purple-400 flex-shrink-0" />
-                      <h3 className="text-lg font-semibold">AI Interpretation</h3>
-                    </div>
-                    <p className="text-gray-300 leading-relaxed">{aiExplanation}</p>
-                  </div>
-                ) : (
-                  <div className="text-center text-gray-400 py-12">
-                    <Sparkles className="w-16 h-16 mx-auto mb-4 opacity-50" />
-                    <p>AI explanation will appear here after running analysis</p>
-                  </div>
-                )}
-              </motion.div>
-            )}
-          </AnimatePresence>
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {data.map((row, i) => (
+                  <tr key={i} style={styles.tr}>
+                    {row.map((cell, j) => (
+                      <td key={j} style={styles.td}>
+                        {cell}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div style={styles.previewNote}>
+            Showing first {data.length} rows of {file?.originalName}
+          </div>
         </div>
       </div>
     </div>
   );
-}
+};
 
-// Tab Button Component
-function TabButton({ active, onClick, icon, children }) {
-  return (
-    <button
-      onClick={onClick}
-      className={`
-        flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-all
-        ${active
-          ? 'bg-gradient-to-r from-blue-500 to-purple-600 text-white shadow-lg'
-          : 'bg-slate-700/50 text-gray-300 hover:bg-slate-700'
-        }
-      `}
-    >
-      {icon}
-      {children}
-    </button>
-  );
-}
+const styles = {
+  container: {
+    minHeight: '100vh',
+    backgroundColor: '#0a0a0a',
+    color: '#fff',
+    fontFamily: 'Poppins, sans-serif',
+  },
+  header: {
+    backgroundColor: '#1a1a1a',
+    borderBottom: '2px solid #00ff00',
+    padding: '20px 40px',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '20px',
+  },
+  backButton: {
+    padding: '8px 16px',
+    backgroundColor: '#333',
+    color: '#fff',
+    border: 'none',
+    borderRadius: '6px',
+    cursor: 'pointer',
+    fontSize: '14px',
+  },
+  title: {
+    margin: 0,
+    fontSize: '24px',
+    color: '#00ff00',
+  },
+  mainContent: {
+    display: 'flex',
+    height: 'calc(100vh - 84px)',
+  },
+  leftPanel: {
+    flex: '0 0 500px',
+    backgroundColor: '#1a1a1a',
+    borderRight: '2px solid #333',
+    overflowY: 'auto',
+    padding: '30px',
+  },
+  rightPanel: {
+    flex: 1,
+    backgroundColor: '#0a0a0a',
+    overflowY: 'auto',
+    padding: '30px',
+  },
+  configSection: {
+    maxWidth: '100%',
+  },
+  sectionTitle: {
+    fontSize: '20px',
+    marginBottom: '20px',
+    color: '#00ff00',
+    borderBottom: '2px solid #333',
+    paddingBottom: '10px',
+  },
+  formGroup: {
+    marginBottom: '30px',
+  },
+  label: {
+    display: 'block',
+    marginBottom: '10px',
+    fontSize: '16px',
+    fontWeight: '600',
+    color: '#ddd',
+  },
+  tooltip: {
+    marginLeft: '8px',
+    cursor: 'help',
+    fontSize: '14px',
+  },
+  select: {
+    width: '100%',
+    padding: '12px',
+    backgroundColor: '#222',
+    color: '#fff',
+    border: '2px solid #444',
+    borderRadius: '8px',
+    fontSize: '14px',
+    cursor: 'pointer',
+  },
+  checkboxContainer: {
+    maxHeight: '300px',
+    overflowY: 'auto',
+    backgroundColor: '#222',
+    border: '2px solid #444',
+    borderRadius: '8px',
+    padding: '15px',
+  },
+  checkboxLabel: {
+    display: 'flex',
+    alignItems: 'center',
+    padding: '8px',
+    cursor: 'pointer',
+    borderRadius: '4px',
+    transition: 'background-color 0.2s',
+    marginBottom: '5px',
+  },
+  disabledCheckbox: {
+    opacity: 0.4,
+    cursor: 'not-allowed',
+  },
+  checkbox: {
+    marginRight: '10px',
+    width: '18px',
+    height: '18px',
+    cursor: 'pointer',
+  },
+  checkboxText: {
+    fontSize: '14px',
+    color: '#ddd',
+  },
+  varType: {
+    marginLeft: '8px',
+    fontSize: '12px',
+    color: '#888',
+  },
+  selectedCount: {
+    marginTop: '10px',
+    fontSize: '14px',
+    color: '#00ff00',
+    fontWeight: '600',
+  },
+  hint: {
+    marginTop: '8px',
+    fontSize: '12px',
+    color: '#888',
+    fontStyle: 'italic',
+  },
+  submitButton: {
+    width: '100%',
+    padding: '15px',
+    backgroundColor: '#00ff00',
+    color: '#000',
+    border: 'none',
+    borderRadius: '8px',
+    fontSize: '16px',
+    fontWeight: 'bold',
+    cursor: 'pointer',
+    transition: 'all 0.3s ease',
+  },
+  submitButtonDisabled: {
+    backgroundColor: '#666',
+    cursor: 'not-allowed',
+  },
+  tableWrapper: {
+    overflowX: 'auto',
+    overflowY: 'auto',
+    maxHeight: 'calc(100vh - 250px)',
+    backgroundColor: '#1a1a1a',
+    borderRadius: '12px',
+    border: '1px solid #333',
+  },
+  table: {
+    width: '100%',
+    borderCollapse: 'collapse',
+  },
+  th: {
+    padding: '12px',
+    textAlign: 'left',
+    backgroundColor: '#222',
+    color: '#00ff00',
+    fontWeight: '600',
+    position: 'sticky',
+    top: 0,
+    borderBottom: '2px solid #444',
+    zIndex: 10,
+  },
+  headerCell: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  typeBadge: {
+    fontSize: '16px',
+  },
+  tr: {
+    borderBottom: '1px solid #333',
+  },
+  td: {
+    padding: '10px 12px',
+    color: '#ddd',
+    fontSize: '14px',
+  },
+  previewNote: {
+    marginTop: '15px',
+    fontSize: '14px',
+    color: '#888',
+    textAlign: 'center',
+  },
+  loadingContainer: {
+    display: 'flex',
+    flexDirection: 'column',
+    justifyContent: 'center',
+    alignItems: 'center',
+    height: '100vh',
+    backgroundColor: '#0a0a0a',
+    color: '#fff',
+    fontFamily: 'Poppins, sans-serif',
+  },
+  spinner: {
+    border: '4px solid #333',
+    borderTop: '4px solid #00ff00',
+    borderRadius: '50%',
+    width: '50px',
+    height: '50px',
+    animation: 'spin 1s linear infinite',
+    marginBottom: '20px',
+  },
+  errorContainer: {
+    display: 'flex',
+    flexDirection: 'column',
+    justifyContent: 'center',
+    alignItems: 'center',
+    height: '100vh',
+    backgroundColor: '#0a0a0a',
+    color: '#fff',
+    fontFamily: 'Poppins, sans-serif',
+    textAlign: 'center',
+    padding: '40px',
+  },
+};
+
+export default Configure;

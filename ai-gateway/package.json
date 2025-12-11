@@ -8,16 +8,21 @@
     "dev": "nodemon server.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
-  "keywords": ["ai", "statistics", "openai", "regression"],
+  "keywords": [
+    "ai",
+    "statistics",
+    "openai",
+    "regression"
+  ],
   "author": "Jordano - AI Gateway Lead",
   "license": "MIT",
   "dependencies": {
-    "express": "^4.18.2",
     "cors": "^2.8.5",
     "dotenv": "^16.3.1",
-    "openai": "^4.20.1",
+    "express": "^4.18.2",
     "lru-cache": "^10.0.1",
-    "morgan": "^1.10.0"
+    "morgan": "^1.10.1",
+    "openai": "^4.20.1"
   },
   "devDependencies": {
     "nodemon": "^3.0.1"

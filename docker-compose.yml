@@ -28,14 +28,14 @@
     environment:
       - PORT=3000
       - NODE_ENV=production
-      - MONGO_URI=mongodb://mongodb:27017/csc230
+      - MONGODB_URI=mongodb://mongodb:27017/csc230
       - JWT_SECRET=${JWT_SECRET:-your-super-secret-jwt-key-change-in-production}
       - FRONTEND_URL=http://localhost:5173
       - INTEGRATION_API_URL=http://integration-api:5001
     volumes:
       - ./backend:/app
       - /app/node_modules
-      - uploads:/uploads
+      - ./backend/uploads:/uploads
     depends_on:
       mongodb:
         condition: service_healthy
@@ -54,7 +54,7 @@
     environment:
       - PORT=5001
       - NODE_ENV=production
-      - MONGO_URI=mongodb://mongodb:27017/csc230
+      - MONGODB_URI=mongodb://mongodb:27017/csc230
       - R_OLS_URL=http://r-ols:8000
       - R_LOGISTIC_URL=http://r-logistic:8002
       - R_RESERVED_URL=http://r-reserved:8004
@@ -65,11 +65,9 @@
     volumes:
       - ./integration-api:/app
       - /app/node_modules
-      - uploads:/uploads
+      - ./backend/uploads:/uploads
     depends_on:
       - mongodb
-      - core-api
-      - ai-gateway
     networks:
       - csc230-network
     restart: unless-stopped
@@ -107,7 +105,7 @@
       - PORT=8000
       - SERVICE_NAME=ols
     volumes:
-      - uploads:/uploads:ro
+      - ./backend/uploads:/uploads
     networks:
       - csc230-network
     restart: unless-stopped
@@ -124,7 +122,7 @@
       - PORT=8002
       - SERVICE_NAME=logistic
     volumes:
-      - uploads:/uploads:ro
+      - ./backend/uploads:/uploads
     networks:
       - csc230-network
     restart: unless-stopped
@@ -141,7 +139,7 @@
       - PORT=8004
       - SERVICE_NAME=reserved
     volumes:
-      - uploads:/uploads:ro
+      - ./backend/uploads:/uploads
     networks:
       - csc230-network
     restart: unless-stopped
@@ -171,4 +169,3 @@ networks:
 
 volumes:
   mongodb_data:
-  uploads:
